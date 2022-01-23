@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin\Controllers\Table;
 
+use PhpMyAdmin\ConfigStorage\Relation;
+use PhpMyAdmin\ConfigStorage\RelationCleanup;
 use PhpMyAdmin\Core;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\DbTableExists;
 use PhpMyAdmin\Operations;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\RelationCleanup;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Sql;
 use PhpMyAdmin\Table\Search;
 use PhpMyAdmin\Template;
@@ -41,49 +41,42 @@ class SearchController extends AbstractController
     /**
      * Names of columns
      *
-     * @access private
      * @var array
      */
     private $columnNames;
     /**
      * Types of columns
      *
-     * @access private
      * @var array
      */
     private $columnTypes;
     /**
      * Types of columns without any replacement
      *
-     * @access private
      * @var array
      */
     private $originalColumnTypes;
     /**
      * Collations of columns
      *
-     * @access private
      * @var array
      */
     private $columnCollations;
     /**
      * Null Flags of columns
      *
-     * @access private
      * @var array
      */
     private $columnNullFlags;
     /**
      * Whether a geometry column is present
      *
-     * @access private
      * @var bool
      */
     private $geomColumnFlag;
     /**
      * Foreign Keys
      *
-     * @access private
      * @var array
      */
     private $foreigners;
@@ -97,20 +90,14 @@ class SearchController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name
-     * @param string            $table    Table name
-     * @param DatabaseInterface $dbi
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
-        $db,
-        $table,
+        string $db,
+        string $table,
         Search $search,
         Relation $relation,
-        $dbi
+        DatabaseInterface $dbi
     ) {
         parent::__construct($response, $template, $db, $table);
         $this->search = $search;
@@ -134,12 +121,7 @@ class SearchController extends AbstractController
     private function loadTableInfo(): void
     {
         // Gets the list and number of columns
-        $columns = $this->dbi->getColumns(
-            $this->db,
-            $this->table,
-            null,
-            true
-        );
+        $columns = $this->dbi->getColumns($this->db, $this->table, true);
         // Get details about the geometry functions
         $geom_types = Gis::getDataTypes();
 
@@ -156,10 +138,7 @@ class SearchController extends AbstractController
             }
 
             // reformat mysql query output
-            if (
-                strncasecmp($type, 'set', 3) == 0
-                || strncasecmp($type, 'enum', 4) == 0
-            ) {
+            if (strncasecmp($type, 'set', 3) == 0 || strncasecmp($type, 'enum', 4) == 0) {
                 $type = str_replace(',', ', ', $type);
             } else {
                 // strip the "BINARY" attribute, except if we find "BINARY(" because
@@ -191,7 +170,7 @@ class SearchController extends AbstractController
     /**
      * Index action
      */
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $table, $urlParams, $cfg, $errorUrl;
 
@@ -222,10 +201,7 @@ class SearchController extends AbstractController
         /**
          * No selection criteria received -> display the selection form
          */
-        if (
-            ! isset($_POST['columnsToDisplay'])
-            && ! isset($_POST['displayAllColumns'])
-        ) {
+        if (! isset($_POST['columnsToDisplay']) && ! isset($_POST['displayAllColumns'])) {
             $this->displaySelectionFormAction();
         } else {
             $this->doSelectionAction();
@@ -234,10 +210,8 @@ class SearchController extends AbstractController
 
     /**
      * Get data row action
-     *
-     * @return void
      */
-    public function getDataRowAction()
+    public function getDataRowAction(): void
     {
         if (! Core::checkSqlQuerySignature($_POST['where_clause'], $_POST['where_clause_sign'])) {
             return;
@@ -246,21 +220,14 @@ class SearchController extends AbstractController
         $extra_data = [];
         $row_info_query = 'SELECT * FROM ' . Util::backquote($_POST['db']) . '.'
             . Util::backquote($_POST['table']) . ' WHERE ' . $_POST['where_clause'];
-        $result = $this->dbi->query(
-            $row_info_query . ';',
-            DatabaseInterface::CONNECT_USER,
-            DatabaseInterface::QUERY_STORE
-        );
+        $result = $this->dbi->query($row_info_query . ';');
         $fields_meta = $this->dbi->getFieldsMeta($result);
-        while ($row = $this->dbi->fetchAssoc($result)) {
+        while ($row = $result->fetchAssoc()) {
             // for bit fields we need to convert them to printable form
             $i = 0;
             foreach ($row as $col => $val) {
                 if (isset($fields_meta[$i]) && $fields_meta[$i]->isMappedTypeBit) {
-                    $row[$col] = Util::printableBitValue(
-                        (int) $val,
-                        (int) $fields_meta[$i]->length
-                    );
+                    $row[$col] = Util::printableBitValue((int) $val, (int) $fields_meta[$i]->length);
                 }
 
                 $i++;
@@ -274,10 +241,8 @@ class SearchController extends AbstractController
 
     /**
      * Do selection action
-     *
-     * @return void
      */
-    public function doSelectionAction()
+    public function doSelectionAction(): void
     {
         /**
          * Selection criteria have been submitted -> do the work
@@ -322,10 +287,7 @@ class SearchController extends AbstractController
         global $goto, $cfg;
 
         if (! isset($goto)) {
-            $goto = Util::getScriptNameForOption(
-                $cfg['DefaultTabTable'],
-                'table'
-            );
+            $goto = Util::getScriptNameForOption($cfg['DefaultTabTable'], 'table');
         }
 
         $this->render('table/search/index', [
@@ -344,10 +306,8 @@ class SearchController extends AbstractController
 
     /**
      * Range search action
-     *
-     * @return void
      */
-    public function rangeSearchAction()
+    public function rangeSearchAction(): void
     {
         $min_max = $this->getColumnMinMax($_POST['column']);
         $this->response->addJSON('column_data', $min_max);
@@ -358,9 +318,9 @@ class SearchController extends AbstractController
      *
      * @param string $column Column name
      *
-     * @return array
+     * @return array|null
      */
-    public function getColumnMinMax($column)
+    public function getColumnMinMax($column): ?array
     {
         $sql_query = 'SELECT MIN(' . Util::backquote($column) . ') AS `min`, '
             . 'MAX(' . Util::backquote($column) . ') AS `max` '
@@ -407,14 +367,9 @@ class SearchController extends AbstractController
         );
         $htmlAttributes = '';
         if (in_array($cleanType, $this->dbi->types->getIntegerTypes())) {
-            $extractedColumnspec = Util::extractColumnSpec(
-                $this->originalColumnTypes[$column_index]
-            );
+            $extractedColumnspec = Util::extractColumnSpec($this->originalColumnTypes[$column_index]);
             $is_unsigned = $extractedColumnspec['unsigned'];
-            $minMaxValues = $this->dbi->types->getIntegerRange(
-                $cleanType,
-                ! $is_unsigned
-            );
+            $minMaxValues = $this->dbi->types->getIntegerRange($cleanType, ! $is_unsigned);
             $htmlAttributes = 'data-min="' . $minMaxValues[0] . '" '
                             . 'data-max="' . $minMaxValues[1] . '"';
         }

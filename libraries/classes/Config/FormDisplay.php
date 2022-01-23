@@ -135,17 +135,10 @@ class FormDisplay
      * @param string $formName Form name
      * @param array  $form     Form data
      * @param int    $serverId 0 if new server, validation; >= 1 if editing a server
-     *
-     * @return void
      */
-    public function registerForm($formName, array $form, $serverId = null)
+    public function registerForm($formName, array $form, $serverId = null): void
     {
-        $this->forms[$formName] = new Form(
-            $formName,
-            $form,
-            $this->configFile,
-            $serverId
-        );
+        $this->forms[$formName] = new Form($formName, $form, $this->configFile, $serverId);
         $this->isValidated = false;
         foreach ($this->forms[$formName]->fields as $path) {
             $workPath = $serverId === null
@@ -162,10 +155,8 @@ class FormDisplay
      * @param bool $allowPartialSave allows for partial form saving
      *                               on failed validation
      * @param bool $checkFormSubmit  whether check for $_POST['submit_save']
-     *
-     * @return bool whether processing was successful
      */
-    public function process($allowPartialSave = true, $checkFormSubmit = true)
+    public function process($allowPartialSave = true, $checkFormSubmit = true): bool
     {
         if ($checkFormSubmit && ! isset($_POST['submit_save'])) {
             return false;
@@ -181,10 +172,8 @@ class FormDisplay
 
     /**
      * Runs validation for all registered forms
-     *
-     * @return void
      */
-    private function validate()
+    private function validate(): void
     {
         if ($this->isValidated) {
             return;
@@ -193,7 +182,6 @@ class FormDisplay
         $paths = [];
         $values = [];
         foreach ($this->forms as $form) {
-            /** @var Form $form */
             $paths[] = $form->name;
             // collect values and paths
             foreach ($form->fields as $path) {
@@ -204,12 +192,7 @@ class FormDisplay
         }
 
         // run validation
-        $errors = Validator::validate(
-            $this->configFile,
-            $paths,
-            $values,
-            false
-        );
+        $errors = Validator::validate($this->configFile, $paths, $values, false);
 
         // change error keys from canonical paths to work paths
         if (is_array($errors) && count($errors) > 0) {
@@ -264,7 +247,6 @@ class FormDisplay
         // validate only when we aren't displaying a "new server" form
         $isNewServer = false;
         foreach ($this->forms as $form) {
-            /** @var Form $form */
             if ($form->index === 0) {
                 $isNewServer = true;
                 break;
@@ -524,10 +506,8 @@ class FormDisplay
 
     /**
      * Reverts erroneous fields to their default values
-     *
-     * @return void
      */
-    public function fixErrors()
+    public function fixErrors(): void
     {
         $this->validate();
         if (count($this->errors) === 0) {
@@ -556,14 +536,11 @@ class FormDisplay
         $valueCmp = is_bool($value)
             ? (int) $value
             : $value;
-        foreach ($allowed as $vk => $v) {
+        foreach (array_keys($allowed) as $vk) {
             // equality comparison only if both values are numeric or not numeric
             // (allows to skip 0 == 'string' equalling to true)
             // or identity (for string-string)
-            if (
-                ! (($vk == $value && ! (is_numeric($valueCmp) xor is_numeric($vk)))
-                || $vk === $value)
-            ) {
+            if (! (($vk == $value && ! (is_numeric($valueCmp) xor is_numeric($vk))) || $vk === $value)) {
                 continue;
             }
 
@@ -585,10 +562,8 @@ class FormDisplay
      * @param array|string $forms            array of form names
      * @param bool         $allowPartialSave allows for partial form saving on
      *                                       failed validation
-     *
-     * @return bool true on success (no errors and all saved)
      */
-    public function save($forms, $allowPartialSave = true)
+    public function save($forms, $allowPartialSave = true): bool
     {
         $result = true;
         $forms = (array) $forms;
@@ -606,7 +581,6 @@ class FormDisplay
                 continue;
             }
 
-            /** @var Form $form */
             $form = $this->forms[$formName];
             // get current server id
             $changeIndex = $form->index === 0
@@ -639,13 +613,8 @@ class FormDisplay
                 }
 
                 // user preferences allow/disallow
-                if (
-                    $isSetupScript
-                    && isset($this->userprefsKeys[$systemPath])
-                ) {
-                    if (
-                        isset($this->userprefsDisallow[$systemPath], $_POST[$key . '-userprefs-allow'])
-                    ) {
+                if ($isSetupScript && isset($this->userprefsKeys[$systemPath])) {
+                    if (isset($this->userprefsDisallow[$systemPath], $_POST[$key . '-userprefs-allow'])) {
                         unset($this->userprefsDisallow[$systemPath]);
                     } elseif (! isset($_POST[$key . '-userprefs-allow'])) {
                         $this->userprefsDisallow[$systemPath] = true;
@@ -724,11 +693,7 @@ class FormDisplay
                 $i = 0;
                 foreach ($values[$path] as $value) {
                     $matches = [];
-                    $match = preg_match(
-                        '/^(.+):(?:[ ]?)(\\w+)$/',
-                        $value,
-                        $matches
-                    );
+                    $match = preg_match('/^(.+):(?:[ ]?)(\\w+)$/', $value, $matches);
                     if ($match) {
                         // correct 'IP: HTTP header' pair
                         $ip = trim($matches[1]);
@@ -761,10 +726,8 @@ class FormDisplay
 
     /**
      * Tells whether form validation failed
-     *
-     * @return bool
      */
-    public function hasErrors()
+    public function hasErrors(): bool
     {
         return count($this->errors) > 0;
     }
@@ -804,10 +767,8 @@ class FormDisplay
 
     /**
      * Fills out {@link userprefs_keys} and {@link userprefs_disallow}
-     *
-     * @return void
      */
-    private function loadUserprefsInfo()
+    private function loadUserprefsInfo(): void
     {
         if ($this->userprefsKeys !== null) {
             return;
@@ -826,10 +787,8 @@ class FormDisplay
      *
      * @param string $systemPath Path to settings
      * @param array  $opts       Chosen options
-     *
-     * @return void
      */
-    private function setComments($systemPath, array &$opts)
+    private function setComments($systemPath, array &$opts): void
     {
         // RecodingEngine - mark unavailable types
         if ($systemPath === 'RecodingEngine') {
@@ -858,14 +817,10 @@ class FormDisplay
         }
 
         // ZipDump, GZipDump, BZipDump - check function availability
-        if (
-            $systemPath === 'ZipDump'
-            || $systemPath === 'GZipDump'
-            || $systemPath === 'BZipDump'
-        ) {
+        if ($systemPath === 'ZipDump' || $systemPath === 'GZipDump' || $systemPath === 'BZipDump') {
             $comment = '';
             $funcs = [
-                'ZipDump'  => [
+                'ZipDump' => [
                     'zip_open',
                     'gzcompress',
                 ],
@@ -904,10 +859,7 @@ class FormDisplay
             return;
         }
 
-        if (
-            $systemPath !== 'MaxDbList' && $systemPath !== 'MaxTableList'
-            && $systemPath !== 'QueryHistoryMax'
-        ) {
+        if ($systemPath !== 'MaxDbList' && $systemPath !== 'MaxTableList' && $systemPath !== 'QueryHistoryMax') {
             return;
         }
 
@@ -922,10 +874,8 @@ class FormDisplay
      *
      * @param array  $postValues List of parameters
      * @param string $key        Array key
-     *
-     * @return void
      */
-    private function fillPostArrayParameters(array $postValues, $key)
+    private function fillPostArrayParameters(array $postValues, $key): void
     {
         foreach ($postValues as $v) {
             $v = Util::requestString($v);

@@ -1,16 +1,11 @@
 <?php
-/**
- * Selenium TestCase for settings related tests
- */
 
 declare(strict_types=1);
 
 namespace PhpMyAdmin\Tests\Selenium;
 
 /**
- * ServerSettingsTest class
- *
- * @group      selenium
+ * @coversNothing
  */
 class ServerSettingsTest extends TestBase
 {
@@ -32,10 +27,7 @@ class ServerSettingsTest extends TestBase
         $this->waitForElement('partialLinkText', 'Settings')->click();
         $this->waitAjax();
 
-        $this->waitForElement(
-            'xpath',
-            "//a[@class='nav-link text-nowrap' and contains(., 'Settings')]"
-        );
+        $this->waitForElement('xpath', "//a[@class='nav-link text-nowrap' and contains(., 'Settings')]");
     }
 
     /**

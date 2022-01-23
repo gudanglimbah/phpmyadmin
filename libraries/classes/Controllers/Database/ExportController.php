@@ -9,7 +9,7 @@ use PhpMyAdmin\Export;
 use PhpMyAdmin\Export\Options;
 use PhpMyAdmin\Message;
 use PhpMyAdmin\Plugins;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
@@ -26,18 +26,19 @@ final class ExportController extends AbstractController
     /** @var Options */
     private $exportOptions;
 
-    /**
-     * @param Response $response
-     * @param string   $db       Database name.
-     */
-    public function __construct($response, Template $template, $db, Export $export, Options $exportOptions)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        string $db,
+        Export $export,
+        Options $exportOptions
+    ) {
         parent::__construct($response, $template, $db);
         $this->export = $export;
         $this->exportOptions = $exportOptions;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $table, $sub_part, $urlParams, $sql_query;
         global $tables, $num_tables, $total_num_tables, $tooltip_truename;
@@ -51,7 +52,7 @@ final class ExportController extends AbstractController
 
         // $sub_part is used in Util::getDbInfo() to see if we are coming from
         // /database/export, in which case we don't obey $cfg['MaxTableList']
-        $sub_part  = '_export';
+        $sub_part = '_export';
 
         Util::checkParameters(['db']);
 
@@ -72,7 +73,7 @@ final class ExportController extends AbstractController
             $tooltip_truename,
             $tooltip_aliasname,
             $pos,
-        ] = Util::getDbInfo($db, $sub_part ?? '');
+        ] = Util::getDbInfo($db, $sub_part);
 
         // exit if no tables in db found
         if ($num_tables < 1) {
@@ -91,33 +92,21 @@ final class ExportController extends AbstractController
 
         foreach ($tables as $each_table) {
             if (isset($_POST['table_select']) && is_array($_POST['table_select'])) {
-                $is_checked = $this->export->getCheckedClause(
-                    $each_table['Name'],
-                    $_POST['table_select']
-                );
+                $is_checked = $this->export->getCheckedClause($each_table['Name'], $_POST['table_select']);
             } elseif (isset($table_select)) {
-                $is_checked = $this->export->getCheckedClause(
-                    $each_table['Name'],
-                    $table_select
-                );
+                $is_checked = $this->export->getCheckedClause($each_table['Name'], $table_select);
             } else {
                 $is_checked = true;
             }
 
             if (isset($_POST['table_structure']) && is_array($_POST['table_structure'])) {
-                $structure_checked = $this->export->getCheckedClause(
-                    $each_table['Name'],
-                    $_POST['table_structure']
-                );
+                $structure_checked = $this->export->getCheckedClause($each_table['Name'], $_POST['table_structure']);
             } else {
                 $structure_checked = $is_checked;
             }
 
             if (isset($_POST['table_data']) && is_array($_POST['table_data'])) {
-                $data_checked = $this->export->getCheckedClause(
-                    $each_table['Name'],
-                    $_POST['table_data']
-                );
+                $data_checked = $this->export->getCheckedClause($each_table['Name'], $_POST['table_data']);
             } else {
                 $data_checked = $is_checked;
             }
@@ -173,17 +162,5 @@ final class ExportController extends AbstractController
             'structure_or_data_forced' => $_POST['structure_or_data_forced'] ?? 0,
             'tables' => $tablesForMultiValues,
         ]));
-    }
-
-    public function tables(): void
-    {
-        if (empty($_POST['selected_tbl'])) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $this->index();
     }
 }

@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Tests\Gis;
 
 use PhpMyAdmin\Gis\GisPolygon;
+use PhpMyAdmin\Image\ImageWrapper;
 use TCPDF;
 
-use function function_exists;
-use function imagecreatetruecolor;
 use function preg_match;
 
 /**
@@ -16,17 +15,12 @@ use function preg_match;
  */
 class GisPolygonTest extends GisGeomTestCase
 {
-    /**
-     * @var    GisPolygon
-     * @access protected
-     */
+    /** @var    GisPolygon */
     protected $object;
 
     /**
      * Sets up the fixture, for example, opens a network connection.
      * This method is called before a test is executed.
-     *
-     * @access protected
      */
     protected function setUp(): void
     {
@@ -37,8 +31,6 @@ class GisPolygonTest extends GisGeomTestCase
     /**
      * Tears down the fixture, for example, closes a network connection.
      * This method is called after a test is executed.
-     *
-     * @access protected
      */
     protected function tearDown(): void
     {
@@ -181,8 +173,7 @@ class GisPolygonTest extends GisGeomTestCase
 
         return [
             [
-                "'POLYGON((35 10,10 20,15 40,45 45,35 10),"
-                    . "(20 30,35 32,30 20,20 30))',124",
+                '\'POLYGON((35 10,10 20,15 40,45 45,35 10),(20 30,35 32,30 20,20 30))\',124',
                 null,
                 [
                     'srid' => '124',
@@ -370,13 +361,9 @@ class GisPolygonTest extends GisGeomTestCase
      */
     public function testGetPointOnSurface(array $ring): void
     {
-        $this->assertEquals(
-            $this->object->isPointInsidePolygon(
-                $this->object->getPointOnSurface($ring),
-                $ring
-            ),
-            true
-        );
+        $point = $this->object->getPointOnSurface($ring);
+        $this->assertIsArray($point);
+        $this->assertTrue($this->object->isPointInsidePolygon($point, $ring));
     }
 
     /**
@@ -418,8 +405,7 @@ class GisPolygonTest extends GisGeomTestCase
                 ],
             ],
             [
-                'POLYGON((35 10,10 20,15 40,45 45,35 10),'
-                    . '(20 30,35 32,30 20,20 30)))',
+                'POLYGON((35 10,10 20,15 40,45 45,35 10),(20 30,35 32,30 20,20 30)))',
                 [
                     'minX' => 10,
                     'maxX' => 45,
@@ -430,14 +416,13 @@ class GisPolygonTest extends GisGeomTestCase
         ];
     }
 
+    /**
+     * @requires extension gd
+     */
     public function testPrepareRowAsPng(): void
     {
-        if (! function_exists('imagecreatetruecolor')) {
-            $this->markTestSkipped('GD extension missing!');
-        }
-
-        $image = imagecreatetruecolor(120, 150);
-        $this->assertNotFalse($image);
+        $image = ImageWrapper::create(120, 150);
+        $this->assertNotNull($image);
         $return = $this->object->prepareRowAsPng(
             'POLYGON((123 0,23 30,17 63,123 0))',
             'image',
@@ -445,7 +430,8 @@ class GisPolygonTest extends GisGeomTestCase
             ['x' => 12, 'y' => 69, 'scale' => 2, 'height' => 150],
             $image
         );
-        $this->assertImage($return);
+        $this->assertEquals(120, $return->width());
+        $this->assertEquals(150, $return->height());
     }
 
     /**
@@ -466,14 +452,8 @@ class GisPolygonTest extends GisGeomTestCase
         array $scale_data,
         TCPDF $pdf
     ): void {
-        $return = $this->object->prepareRowAsPdf(
-            $spatial,
-            $label,
-            $fill_color,
-            $scale_data,
-            $pdf
-        );
-        $this->assertInstanceOf('TCPDF', $return);
+        $return = $this->object->prepareRowAsPdf($spatial, $label, $fill_color, $scale_data, $pdf);
+        $this->assertInstanceOf(TCPDF::class, $return);
     }
 
     /**
@@ -517,12 +497,7 @@ class GisPolygonTest extends GisGeomTestCase
         array $scaleData,
         string $output
     ): void {
-        $string = $this->object->prepareRowAsSvg(
-            $spatial,
-            $label,
-            $fillColor,
-            $scaleData
-        );
+        $string = $this->object->prepareRowAsSvg($spatial, $label, $fillColor, $scaleData);
         $this->assertEquals(1, preg_match($output, $string));
     }
 

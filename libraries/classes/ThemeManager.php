@@ -27,13 +27,18 @@ class ThemeManager
     /**
      * ThemeManager instance
      *
-     * @access private
      * @static
      * @var ThemeManager
      */
     private static $instance;
 
-    /** @var array<string, Theme> available themes */
+    /** @var string file-system path to the theme folder */
+    private $themesPath;
+
+    /** @var string path to theme folder as an URL */
+    private $themesPathUrl;
+
+    /** @var array<string,Theme> available themes */
     public $themes = [];
 
     /** @var string  cookie name */
@@ -61,6 +66,8 @@ class ThemeManager
         $this->themes = [];
         $this->themeDefault = self::FALLBACK_THEME;
         $this->activeTheme = '';
+        $this->themesPath = self::getThemesFsDir();
+        $this->themesPathUrl = self::getThemesDir();
 
         $this->setThemePerServer($GLOBALS['cfg']['ThemePerServer']);
 
@@ -116,8 +123,6 @@ class ThemeManager
      * sets if there are different themes per server
      *
      * @param bool $perServer Whether to enable per server flag
-     *
-     * @access public
      */
     public function setThemePerServer($perServer): void
     {
@@ -128,10 +133,6 @@ class ThemeManager
      * Sets active theme
      *
      * @param string|null $theme theme name
-     *
-     * @return bool true on success
-     *
-     * @access public
      */
     public function setActiveTheme(?string $theme): bool
     {
@@ -160,8 +161,6 @@ class ThemeManager
      * Returns name for storing theme
      *
      * @return string cookie name
-     *
-     * @access public
      */
     public function getThemeCookieName()
     {
@@ -177,8 +176,6 @@ class ThemeManager
      * returns name of theme stored in the cookie
      *
      * @return string|false theme name from cookie or false
-     *
-     * @access public
      */
     public function getThemeCookie()
     {
@@ -196,8 +193,6 @@ class ThemeManager
      * save theme in cookie
      *
      * @return true
-     *
-     * @access public
      */
     public function setThemeCookie(): bool
     {
@@ -217,7 +212,7 @@ class ThemeManager
     public function loadThemes(): void
     {
         $this->themes = [];
-        $dirHandle = opendir(ROOT_PATH . 'themes/');
+        $dirHandle = opendir($this->themesPath);
 
         if ($dirHandle === false) {
             trigger_error('Error: cannot open themes folder: ./themes', E_USER_WARNING);
@@ -226,7 +221,7 @@ class ThemeManager
         }
 
         while (($dir = readdir($dirHandle)) !== false) {
-            if ($dir === '.' || $dir === '..' || ! @is_dir(ROOT_PATH . 'themes/' . $dir . '/')) {
+            if ($dir === '.' || $dir === '..' || ! @is_dir($this->themesPath . $dir)) {
                 continue;
             }
 
@@ -234,7 +229,7 @@ class ThemeManager
                 continue;
             }
 
-            $newTheme = Theme::load($dir);
+            $newTheme = Theme::load($this->themesPathUrl . $dir, $this->themesPath . $dir . DIRECTORY_SEPARATOR, $dir);
             if (! $newTheme instanceof Theme) {
                 continue;
             }
@@ -250,8 +245,6 @@ class ThemeManager
      * checks if given theme name is a known theme
      *
      * @param string|null $theme name fo theme to check for
-     *
-     * @access public
      */
     public function checkTheme(?string $theme): bool
     {
@@ -293,6 +286,6 @@ class ThemeManager
      */
     public static function getThemesDir(): string
     {
-        return './themes' . DIRECTORY_SEPARATOR;
+        return './themes/';// This is an URL
     }
 }

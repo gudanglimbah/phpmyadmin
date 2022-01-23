@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace PhpMyAdmin;
 
 use function __;
+use function array_keys;
 use function asort;
 use function ceil;
 use function floor;
@@ -229,7 +230,7 @@ class BrowseForeigners
             . '<tbody>' . "\n";
 
         $descriptions = [];
-        $keys   = [];
+        $keys = [];
         foreach ($foreignData['disp_row'] as $relrow) {
             if ($foreignData['foreign_display'] != false) {
                 $descriptions[] = $relrow[$foreignData['foreign_display']] ?? '';
@@ -245,7 +246,7 @@ class BrowseForeigners
         $horizontalCount = 0;
         $indexByDescription = 0;
 
-        foreach ($keys as $indexByKeyname => $value) {
+        foreach (array_keys($keys) as $indexByKeyname) {
             [
                 $html,
                 $horizontalCount,
@@ -262,8 +263,7 @@ class BrowseForeigners
             $output .= $html;
         }
 
-        $output .= '</tbody>'
-            . '</table>';
+        $output .= '</tbody></table>';
 
         return $output;
     }
@@ -278,22 +278,11 @@ class BrowseForeigners
     private function getDescriptionAndTitle(string $description): array
     {
         if (mb_strlen($description) <= $this->limitChars) {
-            $description = htmlspecialchars(
-                $description
-            );
             $descriptionTitle = '';
         } else {
-            $descriptionTitle = htmlspecialchars(
-                $description
-            );
-            $description = htmlspecialchars(
-                mb_substr(
-                    $description,
-                    0,
-                    $this->limitChars
-                )
-                . '...'
-            );
+            $descriptionTitle = $description;
+            $description = mb_substr($description, 0, $this->limitChars)
+            . '...';
         }
 
         return [

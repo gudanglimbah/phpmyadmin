@@ -6,12 +6,13 @@ namespace PhpMyAdmin\Controllers;
 
 use PhpMyAdmin\Core;
 use PhpMyAdmin\Normalization;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 
 use function __;
 use function _pgettext;
+use function in_array;
 use function intval;
 use function json_decode;
 use function json_encode;
@@ -25,16 +26,13 @@ class NormalizationController extends AbstractController
     /** @var Normalization */
     private $normalization;
 
-    /**
-     * @param Response $response
-     */
-    public function __construct($response, Template $template, Normalization $normalization)
+    public function __construct(ResponseRenderer $response, Template $template, Normalization $normalization)
     {
         parent::__construct($response, $template);
         $this->normalization = $normalization;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $table;
 
@@ -67,12 +65,7 @@ class NormalizationController extends AbstractController
                 'Field' => $table . '_id',
                 'Extra' => 'auto_increment',
             ];
-            $html = $this->normalization->getHtmlForCreateNewColumn(
-                $num_fields,
-                $db,
-                $table,
-                $columnMeta
-            );
+            $html = $this->normalization->getHtmlForCreateNewColumn($num_fields, $db, $table, $columnMeta);
             $html .= Url::getHiddenInputs($db, $table);
             echo $html;
 
@@ -108,7 +101,7 @@ class NormalizationController extends AbstractController
         $this->addScriptFiles(['normalization.js', 'vendor/jquery/jquery.uitablefilter.js']);
 
         $normalForm = '1nf';
-        if (Core::isValid($_POST['normalizeTo'], ['1nf', '2nf', '3nf'])) {
+        if (isset($_POST['normalizeTo']) && in_array($_POST['normalizeTo'], ['1nf', '2nf', '3nf'])) {
             $normalForm = $_POST['normalizeTo'];
         }
 

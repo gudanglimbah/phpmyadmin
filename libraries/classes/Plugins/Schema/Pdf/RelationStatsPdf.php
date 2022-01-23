@@ -19,10 +19,9 @@ use function sqrt;
  * master table's master field to foreign table's foreign key
  * in PDF document.
  *
- * @see     PMA_Schema_PDF::SetDrawColor PMA_Schema_PDF::setLineWidthScale
- *          Pdf::lineScale
- *
- * @name    Relation_Stats_Pdf
+ * @see Schema\Pdf::SetDrawColor
+ * @see Schema\Pdf::setLineWidthScale
+ * @see Pdf::lineScale
  */
 class RelationStatsPdf extends RelationStats
 {
@@ -41,13 +40,7 @@ class RelationStatsPdf extends RelationStats
         $foreign_field
     ) {
         $this->wTick = 5;
-        parent::__construct(
-            $diagram,
-            $master_table,
-            $master_field,
-            $foreign_table,
-            $foreign_field
-        );
+        parent::__construct($diagram, $master_table, $master_field, $foreign_table, $foreign_field);
     }
 
     /**
@@ -57,12 +50,8 @@ class RelationStatsPdf extends RelationStats
      *
      * @param bool $showColor Whether to use one color per relation or not
      * @param int  $i         The id of the link to draw
-     *
-     * @return void
-     *
-     * @access public
      */
-    public function relationDraw($showColor, $i)
+    public function relationDraw($showColor, $i): void
     {
         if ($showColor) {
             $d = $i % 6;
@@ -109,12 +98,7 @@ class RelationStatsPdf extends RelationStats
         }
 
         $this->diagram->setLineWidthScale(0.2);
-        $this->diagram->lineScale(
-            $this->xSrc,
-            $this->ySrc,
-            $this->xSrc + $this->srcDir * $this->wTick,
-            $this->ySrc
-        );
+        $this->diagram->lineScale($this->xSrc, $this->ySrc, $this->xSrc + $this->srcDir * $this->wTick, $this->ySrc);
         $this->diagram->lineScale(
             $this->xDest + $this->destDir * $this->wTick,
             $this->yDest,

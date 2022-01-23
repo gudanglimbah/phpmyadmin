@@ -1,7 +1,4 @@
 <?php
-/**
- * Set of functions used to build XML dumps of tables
- */
 
 declare(strict_types=1);
 
@@ -29,18 +26,8 @@ use function strlen;
 
 use const PHP_VERSION;
 
-// phpcs:disable PSR1.Files.SideEffects
-/* Can't do server export */
-if (! isset($GLOBALS['db']) || strlen($GLOBALS['db']) === 0) {
-    $GLOBALS['skip_import'] = true;
-
-    return;
-}
-
-// phpcs:enable
-
 /**
- * Handles the export for the XML class
+ * Used to build XML dumps of tables
  */
 class ExportXml extends ExportPlugin
 {
@@ -55,20 +42,20 @@ class ExportXml extends ExportPlugin
      *
      * @var array
      */
-    private $tables;
+    private $tables = [];
 
-    public function __construct()
+    /**
+     * @psalm-return non-empty-lowercase-string
+     */
+    public function getName(): string
     {
-        parent::__construct();
-        $this->setProperties();
+        return 'xml';
     }
 
     /**
      * Initialize the local variables that are used for export XML
-     *
-     * @return void
      */
-    protected function initSpecificVariables()
+    private function initSpecificVariables(): void
     {
         global $table, $tables;
         $this->setTable($table);
@@ -79,12 +66,7 @@ class ExportXml extends ExportPlugin
         $this->setTables($tables);
     }
 
-    /**
-     * Sets the export XML properties
-     *
-     * @return void
-     */
-    protected function setProperties()
+    protected function setProperties(): ExportPluginProperties
     {
         // create the export plugin property item
         $exportPluginProperties = new ExportPluginProperties();
@@ -96,9 +78,7 @@ class ExportXml extends ExportPlugin
         // create the root group that will be the options field for
         // $exportPluginProperties
         // this will be shown as "Format specific options"
-        $exportSpecificOptions = new OptionsPropertyRootGroup(
-            'Format Specific Options'
-        );
+        $exportSpecificOptions = new OptionsPropertyRootGroup('Format Specific Options');
 
         // general options main group
         $generalOptions = new OptionsPropertyMainGroup('general_opts');
@@ -162,7 +142,8 @@ class ExportXml extends ExportPlugin
 
         // set the options for the export plugin property item
         $exportPluginProperties->setOptions($exportSpecificOptions);
-        $this->properties = $exportPluginProperties;
+
+        return $exportPluginProperties;
     }
 
     /**
@@ -179,10 +160,7 @@ class ExportXml extends ExportPlugin
         global $dbi;
 
         // Export routines
-        $routines = $dbi->getProceduresOrFunctions(
-            $db,
-            $dbitype
-        );
+        $routines = $dbi->getProceduresOrFunctions($db, $dbitype);
 
         return $this->exportDefinitions($db, $type, $dbitype, $routines);
     }
@@ -224,10 +202,8 @@ class ExportXml extends ExportPlugin
     /**
      * Outputs export header. It is the first method to be called, so all
      * the required variables are initialized here.
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportHeader()
+    public function exportHeader(): bool
     {
         $this->initSpecificVariables();
         global $crlf, $cfg, $db, $dbi;
@@ -288,10 +264,6 @@ class ExportXml extends ExportPlugin
                 . '" collation="' . htmlspecialchars($db_collation) . '" charset="' . htmlspecialchars($db_charset)
                 . '">' . $crlf;
 
-            if ($tables === null) {
-                $tables = [];
-            }
-
             if (count($tables) === 0) {
                 $tables[] = $table;
             }
@@ -331,10 +303,7 @@ class ExportXml extends ExportPlugin
                 $head .= $tbl . ';' . $crlf;
                 $head .= '            </pma:' . $type . '>' . $crlf;
 
-                if (
-                    ! isset($GLOBALS['xml_export_triggers'])
-                    || ! $GLOBALS['xml_export_triggers']
-                ) {
+                if (! isset($GLOBALS['xml_export_triggers']) || ! $GLOBALS['xml_export_triggers']) {
                     continue;
                 }
 
@@ -361,36 +330,22 @@ class ExportXml extends ExportPlugin
                 unset($trigger, $triggers);
             }
 
-            if (
-                isset($GLOBALS['xml_export_functions'])
-                && $GLOBALS['xml_export_functions']
-            ) {
+            if (isset($GLOBALS['xml_export_functions']) && $GLOBALS['xml_export_functions']) {
                 $head .= $this->exportRoutinesDefinition($db, 'function', 'FUNCTION');
             }
 
-            if (
-                isset($GLOBALS['xml_export_procedures'])
-                && $GLOBALS['xml_export_procedures']
-            ) {
+            if (isset($GLOBALS['xml_export_procedures']) && $GLOBALS['xml_export_procedures']) {
                 $head .= $this->exportRoutinesDefinition($db, 'procedure', 'PROCEDURE');
             }
 
-            if (
-                isset($GLOBALS['xml_export_events'])
-                && $GLOBALS['xml_export_events']
-            ) {
+            if (isset($GLOBALS['xml_export_events']) && $GLOBALS['xml_export_events']) {
                 // Export events
                 $events = $dbi->fetchResult(
                     'SELECT EVENT_NAME FROM information_schema.EVENTS '
                     . "WHERE EVENT_SCHEMA='" . $dbi->escapeString($db)
                     . "'"
                 );
-                $head .= $this->exportDefinitions(
-                    $db,
-                    'event',
-                    'EVENT',
-                    $events
-                );
+                $head .= $this->exportDefinitions($db, 'event', 'EVENT', $events);
             }
 
             unset($result);
@@ -408,10 +363,8 @@ class ExportXml extends ExportPlugin
 
     /**
      * Outputs export footer
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportFooter()
+    public function exportFooter(): bool
     {
         $foot = '</pma_xml_export>';
 
@@ -423,10 +376,8 @@ class ExportXml extends ExportPlugin
      *
      * @param string $db      Database name
      * @param string $dbAlias Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBHeader($db, $dbAlias = '')
+    public function exportDBHeader($db, $dbAlias = ''): bool
     {
         global $crlf;
 
@@ -434,10 +385,7 @@ class ExportXml extends ExportPlugin
             $dbAlias = $db;
         }
 
-        if (
-            isset($GLOBALS['xml_export_contents'])
-            && $GLOBALS['xml_export_contents']
-        ) {
+        if (isset($GLOBALS['xml_export_contents']) && $GLOBALS['xml_export_contents']) {
             $head = '    <!--' . $crlf
                 . '    - ' . __('Database:') . ' \''
                 . htmlspecialchars($dbAlias) . '\'' . $crlf
@@ -454,17 +402,12 @@ class ExportXml extends ExportPlugin
      * Outputs database footer
      *
      * @param string $db Database name
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBFooter($db)
+    public function exportDBFooter($db): bool
     {
         global $crlf;
 
-        if (
-            isset($GLOBALS['xml_export_contents'])
-            && $GLOBALS['xml_export_contents']
-        ) {
+        if (isset($GLOBALS['xml_export_contents']) && $GLOBALS['xml_export_contents']) {
             return $this->export->outputHandler('    </database>' . $crlf);
         }
 
@@ -477,10 +420,8 @@ class ExportXml extends ExportPlugin
      * @param string $db         Database name
      * @param string $exportType 'server', 'database', 'table'
      * @param string $dbAlias    Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBCreate($db, $exportType, $dbAlias = '')
+    public function exportDBCreate($db, $exportType, $dbAlias = ''): bool
     {
         return true;
     }
@@ -494,8 +435,6 @@ class ExportXml extends ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery SQL query for obtaining data
      * @param array  $aliases  Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     public function exportData(
         $db,
@@ -504,7 +443,7 @@ class ExportXml extends ExportPlugin
         $errorUrl,
         $sqlQuery,
         array $aliases = []
-    ) {
+    ): bool {
         global $dbi;
 
         // Do not export data for merge tables
@@ -515,23 +454,14 @@ class ExportXml extends ExportPlugin
         $db_alias = $db;
         $table_alias = $table;
         $this->initAlias($aliases, $db_alias, $table_alias);
-        if (
-            isset($GLOBALS['xml_export_contents'])
-            && $GLOBALS['xml_export_contents']
-        ) {
-            $result = $dbi->query(
-                $sqlQuery,
-                DatabaseInterface::CONNECT_USER,
-                DatabaseInterface::QUERY_UNBUFFERED
-            );
+        if (isset($GLOBALS['xml_export_contents']) && $GLOBALS['xml_export_contents']) {
+            $result = $dbi->query($sqlQuery, DatabaseInterface::CONNECT_USER, DatabaseInterface::QUERY_UNBUFFERED);
 
-            $columns_cnt = $dbi->numFields($result);
+            $columns_cnt = $result->numFields();
             $columns = [];
-            for ($i = 0; $i < $columns_cnt; $i++) {
-                $columns[$i] = stripslashes($dbi->fieldName($result, $i));
+            foreach ($result->getFieldNames() as $column) {
+                $columns[] = stripslashes($column);
             }
-
-            unset($i);
 
             $buffer = '        <!-- ' . __('Table') . ' '
                 . htmlspecialchars($table_alias) . ' -->' . $crlf;
@@ -539,14 +469,12 @@ class ExportXml extends ExportPlugin
                 return false;
             }
 
-            while ($record = $dbi->fetchRow($result)) {
+            while ($record = $result->fetchRow()) {
                 $buffer = '        <table name="'
                     . htmlspecialchars($table_alias) . '">' . $crlf;
                 for ($i = 0; $i < $columns_cnt; $i++) {
                     $col_as = $columns[$i];
-                    if (
-                        ! empty($aliases[$db]['tables'][$table]['columns'][$col_as])
-                    ) {
+                    if (! empty($aliases[$db]['tables'][$table]['columns'][$col_as])) {
                         $col_as = $aliases[$db]['tables'][$table]['columns'][$col_as];
                     }
 
@@ -568,8 +496,6 @@ class ExportXml extends ExportPlugin
                     return false;
                 }
             }
-
-            $dbi->freeResult($result);
         }
 
         return true;
@@ -591,10 +517,8 @@ class ExportXml extends ExportPlugin
      * Sets the table name
      *
      * @param string $table table name
-     *
-     * @return void
      */
-    private function setTable($table)
+    private function setTable($table): void
     {
         $this->table = $table;
     }
@@ -613,11 +537,17 @@ class ExportXml extends ExportPlugin
      * Sets the table names
      *
      * @param array $tables table names
-     *
-     * @return void
      */
-    private function setTables(array $tables)
+    private function setTables(array $tables): void
     {
         $this->tables = $tables;
+    }
+
+    public function isAvailable(): bool
+    {
+        global $db;
+
+        // Can't do server export.
+        return isset($db) && strlen($db) > 0;
     }
 }

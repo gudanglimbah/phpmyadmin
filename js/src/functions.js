@@ -6,7 +6,7 @@
 /* global Indexes */ // js/indexes.js
 /* global firstDayOfCalendar, maxInputVars, mysqlDocTemplate, themeImagePath */ // templates/javascript/variables.twig
 /* global sprintf */ // js/vendor/sprintf.js
-/* global zxcvbn */ // js/vendor/zxcvbn.js
+/* global zxcvbnts */ // js/vendor/zxcvbn-ts.js
 
 /**
  * general function, usually for data manipulation pages
@@ -484,6 +484,7 @@ Functions.hideShowExpression = function ($virtuality) {
 Functions.verifyColumnsProperties = function () {
     $('select.column_type').each(function () {
         Functions.showNoticeForEnum($(this));
+        Functions.showWarningForIntTypes();
     });
     $('select.default_type').each(function () {
         Functions.hideShowDefaultValue($(this));
@@ -518,7 +519,9 @@ Functions.checkPasswordStrength = function (value, meterObject, meterObjectLabel
     if (username !== null) {
         customDict.push(username);
     }
-    var zxcvbnObject = zxcvbn(value, customDict);
+
+    zxcvbnts.core.ZxcvbnOptions.setOptions({ dictionary: { userInputs: customDict } });
+    var zxcvbnObject = zxcvbnts.core.zxcvbn(value);
     var strength = zxcvbnObject.score;
     strength = parseInt(strength);
     meterObject.val(strength);
@@ -1333,360 +1336,6 @@ Functions.updateQueryParameters = function () {
 };
 
 /**
-  * Refresh/resize the WYSIWYG scratchboard
-  */
-Functions.refreshLayout = function () {
-    var $elm = $('#pdflayout');
-    var orientation = $('#orientation_opt').val();
-    var paper = 'A4';
-    var $paperOpt = $('#paper_opt');
-    if ($paperOpt.length === 1) {
-        paper = $paperOpt.val();
-    }
-    var posa = 'y';
-    var posb = 'x';
-    if (orientation === 'P') {
-        posa = 'x';
-        posb = 'y';
-    }
-    $elm.css('width', Functions.pdfPaperSize(paper, posa) + 'px');
-    $elm.css('height', Functions.pdfPaperSize(paper, posb) + 'px');
-};
-
-/**
- * Initializes positions of elements.
- */
-Functions.tableDragInit = function () {
-    $('.pdflayout_table').each(function () {
-        var $this = $(this);
-        var number = $this.data('number');
-        var x = $('#c_table_' + number + '_x').val();
-        var y = $('#c_table_' + number + '_y').val();
-        $this.css('left', x + 'px');
-        $this.css('top', y + 'px');
-        /* Make elements draggable */
-        $this.draggable({
-            containment: 'parent',
-            drag: function (evt, ui) {
-                var number = $this.data('number');
-                $('#c_table_' + number + '_x').val(parseInt(ui.position.left, 10));
-                $('#c_table_' + number + '_y').val(parseInt(ui.position.top, 10));
-            }
-        });
-    });
-};
-
-/**
- * Resets drag and drop positions.
- */
-Functions.resetDrag = function () {
-    $('.pdflayout_table').each(function () {
-        var $this = $(this);
-        var x = $this.data('x');
-        var y = $this.data('y');
-        $this.css('left', x + 'px');
-        $this.css('top', y + 'px');
-    });
-};
-
-/**
- * User schema handlers.
- */
-$(function () {
-    /* Move in scratchboard on manual change */
-    $(document).on('change', '.position-change', function () {
-        var $this = $(this);
-        var $elm = $('#table_' + $this.data('number'));
-        $elm.css($this.data('axis'), $this.val() + 'px');
-    });
-    /* Refresh on paper size/orientation change */
-    $(document).on('change', '.paper-change', function () {
-        var $elm = $('#pdflayout');
-        if ($elm.css('visibility') === 'visible') {
-            Functions.refreshLayout();
-            Functions.tableDragInit();
-        }
-    });
-    /* Show/hide the WYSIWYG scratchboard */
-    $(document).on('click', '#toggle-dragdrop', function () {
-        var $elm = $('#pdflayout');
-        if ($elm.css('visibility') === 'hidden') {
-            Functions.refreshLayout();
-            Functions.tableDragInit();
-            $elm.css('visibility', 'visible');
-            $elm.css('display', 'block');
-            $('#showwysiwyg').val('1');
-        } else {
-            $elm.css('visibility', 'hidden');
-            $elm.css('display', 'none');
-            $('#showwysiwyg').val('0');
-        }
-    });
-    /* Reset scratchboard */
-    $(document).on('click', '#reset-dragdrop', function () {
-        Functions.resetDrag();
-    });
-});
-
-/**
- * Returns paper sizes for a given format
- *
- * @param {string} format
- * @param {'x'|'y'} axis
- * @return {number}
- */
-Functions.pdfPaperSize = function (format, axis) {
-    switch (format.toUpperCase()) {
-    case '4A0':
-        if (axis === 'x') {
-            return 4767.87;
-        }
-        return 6740.79;
-    case '2A0':
-        if (axis === 'x') {
-            return 3370.39;
-        }
-        return 4767.87;
-    case 'A0':
-        if (axis === 'x') {
-            return 2383.94;
-        }
-        return 3370.39;
-    case 'A1':
-        if (axis === 'x') {
-            return 1683.78;
-        }
-        return 2383.94;
-    case 'A2':
-        if (axis === 'x') {
-            return 1190.55;
-        }
-        return 1683.78;
-    case 'A3':
-        if (axis === 'x') {
-            return 841.89;
-        }
-        return 1190.55;
-    case 'A4':
-        if (axis === 'x') {
-            return 595.28;
-        }
-        return 841.89;
-    case 'A5':
-        if (axis === 'x') {
-            return 419.53;
-        }
-        return 595.28;
-    case 'A6':
-        if (axis === 'x') {
-            return 297.64;
-        }
-        return 419.53;
-    case 'A7':
-        if (axis === 'x') {
-            return 209.76;
-        }
-        return 297.64;
-    case 'A8':
-        if (axis === 'x') {
-            return 147.40;
-        }
-        return 209.76;
-    case 'A9':
-        if (axis === 'x') {
-            return 104.88;
-        }
-        return 147.40;
-    case 'A10':
-        if (axis === 'x') {
-            return 73.70;
-        }
-        return 104.88;
-    case 'B0':
-        if (axis === 'x') {
-            return 2834.65;
-        }
-        return 4008.19;
-    case 'B1':
-        if (axis === 'x') {
-            return 2004.09;
-        }
-        return 2834.65;
-    case 'B2':
-        if (axis === 'x') {
-            return 1417.32;
-        }
-        return 2004.09;
-    case 'B3':
-        if (axis === 'x') {
-            return 1000.63;
-        }
-        return 1417.32;
-    case 'B4':
-        if (axis === 'x') {
-            return 708.66;
-        }
-        return 1000.63;
-    case 'B5':
-        if (axis === 'x') {
-            return 498.90;
-        }
-        return 708.66;
-    case 'B6':
-        if (axis === 'x') {
-            return 354.33;
-        }
-        return 498.90;
-    case 'B7':
-        if (axis === 'x') {
-            return 249.45;
-        }
-        return 354.33;
-    case 'B8':
-        if (axis === 'x') {
-            return 175.75;
-        }
-        return 249.45;
-    case 'B9':
-        if (axis === 'x') {
-            return 124.72;
-        }
-        return 175.75;
-    case 'B10':
-        if (axis === 'x') {
-            return 87.87;
-        }
-        return 124.72;
-    case 'C0':
-        if (axis === 'x') {
-            return 2599.37;
-        }
-        return 3676.54;
-    case 'C1':
-        if (axis === 'x') {
-            return 1836.85;
-        }
-        return 2599.37;
-    case 'C2':
-        if (axis === 'x') {
-            return 1298.27;
-        }
-        return 1836.85;
-    case 'C3':
-        if (axis === 'x') {
-            return 918.43;
-        }
-        return 1298.27;
-    case 'C4':
-        if (axis === 'x') {
-            return 649.13;
-        }
-        return 918.43;
-    case 'C5':
-        if (axis === 'x') {
-            return 459.21;
-        }
-        return 649.13;
-    case 'C6':
-        if (axis === 'x') {
-            return 323.15;
-        }
-        return 459.21;
-    case 'C7':
-        if (axis === 'x') {
-            return 229.61;
-        }
-        return 323.15;
-    case 'C8':
-        if (axis === 'x') {
-            return 161.57;
-        }
-        return 229.61;
-    case 'C9':
-        if (axis === 'x') {
-            return 113.39;
-        }
-        return 161.57;
-    case 'C10':
-        if (axis === 'x') {
-            return 79.37;
-        }
-        return 113.39;
-    case 'RA0':
-        if (axis === 'x') {
-            return 2437.80;
-        }
-        return 3458.27;
-    case 'RA1':
-        if (axis === 'x') {
-            return 1729.13;
-        }
-        return 2437.80;
-    case 'RA2':
-        if (axis === 'x') {
-            return 1218.90;
-        }
-        return 1729.13;
-    case 'RA3':
-        if (axis === 'x') {
-            return 864.57;
-        }
-        return 1218.90;
-    case 'RA4':
-        if (axis === 'x') {
-            return 609.45;
-        }
-        return 864.57;
-    case 'SRA0':
-        if (axis === 'x') {
-            return 2551.18;
-        }
-        return 3628.35;
-    case 'SRA1':
-        if (axis === 'x') {
-            return 1814.17;
-        }
-        return 2551.18;
-    case 'SRA2':
-        if (axis === 'x') {
-            return 1275.59;
-        }
-        return 1814.17;
-    case 'SRA3':
-        if (axis === 'x') {
-            return 907.09;
-        }
-        return 1275.59;
-    case 'SRA4':
-        if (axis === 'x') {
-            return 637.80;
-        }
-        return 907.09;
-    case 'LETTER':
-        if (axis === 'x') {
-            return 612.00;
-        }
-        return 792.00;
-    case 'LEGAL':
-        if (axis === 'x') {
-            return 612.00;
-        }
-        return 1008.00;
-    case 'EXECUTIVE':
-        if (axis === 'x') {
-            return 521.86;
-        }
-        return 756.00;
-    case 'FOLIO':
-        if (axis === 'x') {
-            return 612.00;
-        }
-        return 936.00;
-    }
-    return 0;
-};
-
-/**
  * Get checkbox for foreign key checks
  *
  * @return {string}
@@ -1993,7 +1642,8 @@ Functions.documentationAdd = function ($elm, params) {
         params[0]
     );
     if (params.length > 1) {
-        url += '#' + params[1];
+        // The # needs to be escaped to be part of the destination URL
+        url += encodeURIComponent('#') + params[1];
     }
     var content = $elm.text();
     $elm.text('');
@@ -2304,25 +1954,11 @@ Functions.previewSql = function ($form) {
         success: function (response) {
             Functions.ajaxRemoveMessage($messageBox);
             if (response.success) {
-                var $dialogContent = $('<div></div>')
-                    .append(response.sql_data);
-                var buttonOptions = {};
-                buttonOptions[Messages.strClose] = function () {
-                    $(this).dialog('close');
-                };
-                $dialogContent.dialog({
-                    minWidth: 550,
-                    maxHeight: 400,
-                    modal: true,
-                    buttons: buttonOptions,
-                    title: Messages.strPreviewSQL,
-                    close: function () {
-                        $(this).remove();
-                    },
-                    open: function () {
-                        // Pretty SQL printing.
-                        Functions.highlightSql($(this));
-                    }
+                $('#previewSqlModal').modal('show');
+                $('#previewSqlModal').find('.modal-body').first().html(response.sql_data);
+                $('#previewSqlModalLabel').first().html(Messages.strPreviewSQL);
+                $('#previewSqlModal').on('shown.bs.modal', function () {
+                    Functions.highlightSql($('#previewSqlModal'));
                 });
             } else {
                 Functions.ajaxShowMessage(response.message);
@@ -2350,39 +1986,15 @@ Functions.previewSql = function ($form) {
  * @return {void}
  */
 Functions.confirmPreviewSql = function (sqlData, url, callback) {
-    var $dialogContent = $('<div class="preview_sql"><code class="sql"><pre>'
-        + sqlData
-        + '</pre></code></div>'
-    );
-    var buttonOptions = [
-        {
-            text: Messages.strOK,
-            class: 'submitOK',
-            click: function () {
-                callback(url);
-            }
-        },
-        {
-            text: Messages.strCancel,
-            class: 'submitCancel',
-            click: function () {
-                $(this).dialog('close');
-            }
-        }
-    ];
-    $dialogContent.dialog({
-        minWidth: 550,
-        maxHeight: 400,
-        modal: true,
-        buttons: buttonOptions,
-        title: Messages.strPreviewSQL,
-        close: function () {
-            $(this).remove();
-        },
-        open: function () {
-            // Pretty SQL printing.
-            Functions.highlightSql($(this));
-        }
+    $('#previewSqlConfirmModal').modal('show');
+    $('#previewSqlConfirmModalLabel').first().html(Messages.strPreviewSQL);
+    $('#previewSqlConfirmCode').first().text(sqlData);
+    $('#previewSqlConfirmModal').on('shown.bs.modal', function () {
+        Functions.highlightSql($('#previewSqlConfirmModal'));
+    });
+    $('#previewSQLConfirmOkButton').on('click', function () {
+        callback(url);
+        $('#previewSqlConfirmModal').modal('hide');
     });
 };
 
@@ -2450,7 +2062,7 @@ $(function () {
      *
      * @return {boolean}
      */
-    function copyToClipboard (text) {
+    Functions.copyToClipboard = function (text) {
         var $temp = $('<input>');
         $temp.css({ 'position': 'fixed', 'width': '2em', 'border': 0, 'top': 0, 'left': 0, 'padding': 0, 'background': 'transparent' });
         $('body').append($temp);
@@ -2463,11 +2075,11 @@ $(function () {
             $temp.remove();
             return false;
         }
-    }
+    };
 
     $(document).on('click', 'a.copyQueryBtn', function (event) {
         event.preventDefault();
-        var res = copyToClipboard($(this).attr('data-text'));
+        var res = Functions.copyToClipboard($(this).attr('data-text'));
         if (res) {
             $(this).after('<span id=\'copyStatus\'> (' + Messages.strCopyQueryButtonSuccess + ')</span>');
         } else {
@@ -2492,6 +2104,25 @@ Functions.showNoticeForEnum = function (selectElement) {
         $('p#enum_notice_' + enumNoticeId).show();
     } else {
         $('p#enum_notice_' + enumNoticeId).hide();
+    }
+};
+
+/**
+ * Hides/shows a warning message when LENGTH is used with inappropriate integer type
+ */
+Functions.showWarningForIntTypes = function () {
+    if ($('div#length_not_allowed').length) {
+        var lengthRestrictions = $('select.column_type option').map(function () {
+            return $(this).filter(':selected').attr('data-length-restricted');
+        }).get();
+
+        var restricationFound = lengthRestrictions.some(restriction => Number(restriction) === 1);
+
+        if (restricationFound) {
+            $('div#length_not_allowed').show();
+        } else {
+            $('div#length_not_allowed').hide();
+        }
     }
 };
 
@@ -2844,7 +2475,6 @@ jQuery.fn.sortTable = Functions.sortTable;
  * Unbind all event handlers before tearing down a page
  */
 AJAX.registerTeardown('functions.js', function () {
-    $(document).off('submit', '#create_table_form_minimal.ajax');
     $(document).off('submit', 'form.create_table_form.ajax');
     $(document).off('click', 'form.create_table_form.ajax input[name=submit_num_fields]');
     $(document).off('keyup', 'form.create_table_form.ajax input');
@@ -3263,6 +2893,7 @@ AJAX.registerOnload('functions.js', function () {
     // needs on() to work also in the Create Table dialog
     $(document).on('change', 'select.column_type', function () {
         Functions.showNoticeForEnum($(this));
+        Functions.showWarningForIntTypes();
     });
     $(document).on('change', 'select.default_type', function () {
         Functions.hideShowDefaultValue($(this));
@@ -3372,12 +3003,6 @@ AJAX.registerTeardown('functions.js', function () {
 });
 
 /**
- * @var $enumEditorDialog An object that points to the jQuery
- *                          dialog of the ENUM/SET editor
- */
-var $enumEditorDialog = null;
-
-/**
  * Opens the ENUM/SET editor and controls its functions
  */
 AJAX.registerOnload('functions.js', function () {
@@ -3471,27 +3096,18 @@ AJAX.registerOnload('functions.js', function () {
                     '\'>' +
                     '</fieldset>' +
                     '</div>';
-        /**
-         * @var {object} buttonOptions Defines functions to be called when the buttons in
-         * the buttonOptions jQuery dialog bar are pressed
-         */
-        var buttonOptions = {};
-        buttonOptions[Messages.strGo] = function () {
+        $('#enumEditorGoButton').on('click', function () {
             // When the submit button is clicked,
             // put the data back into the original form
             var valueArray = [];
-            $(this).find('.values input').each(function (index, elm) {
+            $('#enumEditorModal').find('.values input').each(function (index, elm) {
                 var val = elm.value.replace(/\\/g, '\\\\').replace(/'/g, '\'\'');
                 valueArray.push('\'' + val + '\'');
             });
             // get the Length/Values text field where this value belongs
-            var valuesId = $(this).find('input[type=\'hidden\']').val();
+            var valuesId = $('#enumEditorModal').find('input[type=\'hidden\']').val();
             $('input#' + valuesId).val(valueArray.join(','));
-            $(this).dialog('close');
-        };
-        buttonOptions[Messages.strClose] = function () {
-            $(this).dialog('close');
-        };
+        });
         // Show the dialog
         var width = parseInt(
             (parseInt($('html').css('font-size'), 10) / 13) * 340,
@@ -3500,22 +3116,10 @@ AJAX.registerOnload('functions.js', function () {
         if (! width) {
             width = 340;
         }
-        $enumEditorDialog = $(dialog).dialog({
-            minWidth: width,
-            maxHeight: 450,
-            modal: true,
-            title: Messages.enum_editor,
-            buttons: buttonOptions,
-            open: function () {
-                // Focus the "Go" button after opening the dialog
-                $(this).closest('.ui-dialog').find('.ui-dialog-buttonpane button').first().trigger('focus');
-            },
-            close: function () {
-                $(this).remove();
-            }
-        });
+        $('#enumEditorModal').modal('show');
+        $('#enumEditorModal').find('.modal-body').first().html(dialog);
         // slider for choosing how many fields to add
-        $enumEditorDialog.find('.slider').slider({
+        $('#enumEditorModal').find('.slider').slider({
             animate: true,
             range: 'min',
             value: 1,
@@ -3671,9 +3275,9 @@ AJAX.registerOnload('functions.js', function () {
     // When "add a new value" is clicked, append an empty text field
     $(document).on('click', 'input.add_value', function (e) {
         e.preventDefault();
-        var numNewRows = $enumEditorDialog.find('div.slider').slider('value');
+        var numNewRows = $('#enumEditorModal').find('div.slider').slider('value');
         while (numNewRows--) {
-            $enumEditorDialog.find('.values')
+            $('#enumEditorModal').find('.values')
                 .append(
                     '<tr class=\'hide\'><td>' +
                     '<input type=\'text\'>' +
@@ -3768,18 +3372,12 @@ AJAX.registerOnload('functions.js', function () {
 });
 Functions.indexDialogModal = function (routeUrl, url, title, callbackSuccess, callbackFailure) {
     /* Remove the hidden dialogs if there are*/
-    var $editIndexDialog = $('#edit_index_dialog');
-    if ($editIndexDialog.length !== 0) {
-        $editIndexDialog.remove();
-    }
-    var $div = $('<div id="edit_index_dialog"></div>');
-
+    var modal = $('#indexDialogModal');
     /**
      * @var button_options Object that stores the options
      *                     passed to jQueryUI dialog
      */
-    var buttonOptions = {};
-    buttonOptions[Messages.strGo] = function () {
+    $('#indexDialogModalGoButton').on('click', function () {
         /**
          * @var the_form object referring to the export form
          */
@@ -3802,7 +3400,7 @@ Functions.indexDialogModal = function (routeUrl, url, title, callbackSuccess, ca
                     .append(data.index_table)
                     .find('#table_index')
                     .insertAfter('#index_header');
-                var $editIndexDialog = $('#edit_index_dialog');
+                var $editIndexDialog = $('#indexDialogModal');
                 if ($editIndexDialog.length > 0) {
                     $editIndexDialog.dialog('close');
                 }
@@ -3825,15 +3423,12 @@ Functions.indexDialogModal = function (routeUrl, url, title, callbackSuccess, ca
                 Functions.ajaxShowMessage($error, false);
             }
         }); // end $.post()
-    };
-    buttonOptions[Messages.strPreviewSQL] = function () {
+    });
+    $('#indexDialogModalPreviewButton').on('click', function () {
         // Function for Previewing SQL
         var $form = $('#index_frm');
         Functions.previewSql($form);
-    };
-    buttonOptions[Messages.strCancel] = function () {
-        $(this).dialog('close');
-    };
+    });
     var $msgbox = Functions.ajaxShowMessage();
     $.post(routeUrl, url, function (data) {
         if (typeof data !== 'undefined' && data.success === false) {
@@ -3842,20 +3437,12 @@ Functions.indexDialogModal = function (routeUrl, url, title, callbackSuccess, ca
         } else {
             Functions.ajaxRemoveMessage($msgbox);
             // Show dialog if the request was successful
-            $div
-                .append(data.message)
-                .dialog({
-                    title: title,
-                    width: 'auto',
-                    open: Functions.verifyColumnsProperties,
-                    modal: true,
-                    buttons: buttonOptions,
-                    close: function () {
-                        $(this).remove();
-                    }
-                });
-            $div.find('.tblFooters').remove();
-            Functions.showIndexEditDialog($div);
+            modal.modal('show');
+            modal.find('.modal-body').first().html(data.message);
+            $('#indexDialogModalLabel').first().text(title);
+            Functions.verifyColumnsProperties();
+            modal.find('.tblFooters').remove();
+            Functions.showIndexEditDialog(modal);
         }
     }); // end $.get()
 };
@@ -3939,6 +3526,7 @@ AJAX.registerOnload('functions.js', function () {
 
 Functions.mainMenuResizerCallback = function () {
     // 5 px margin for jumping menu in Chrome
+    // eslint-disable-next-line compat/compat
     return $(document.body).width() - 5;
 };
 
@@ -4337,11 +3925,6 @@ Functions.getCellValue = function (td) {
     }
 };
 
-$(window).on('popstate', function () {
-    $('#printcss').attr('media','print');
-    return true;
-});
-
 /**
  * Unbind all event handlers before tearing down a page
  */
@@ -4359,49 +3942,10 @@ AJAX.registerOnload('functions.js', function () {
 });
 
 /**
- * Produce print preview
+ * @implements EventListener
  */
-Functions.printPreview = function () {
-    $('#printcss').attr('media','all');
-    Functions.createPrintAndBackButtons();
-};
-
-/**
- * Create print and back buttons in preview page
- */
-Functions.createPrintAndBackButtons = function () {
-    var backButton = $('<input>',{
-        type: 'button',
-        value: Messages.back,
-        class: 'btn btn-secondary',
-        id: 'back_button_print_view'
-    });
-    backButton.on('click', Functions.removePrintAndBackButton);
-    backButton.appendTo('#page_content');
-    var printButton = $('<input>',{
-        type: 'button',
-        value: Messages.print,
-        class: 'btn btn-primary',
-        id: 'print_button_print_view'
-    });
-    printButton.on('click', Functions.printPage);
-    printButton.appendTo('#page_content');
-};
-
-/**
- * Remove print and back buttons and revert to normal view
- */
-Functions.removePrintAndBackButton = function () {
-    $('#printcss').attr('media','print');
-    $('#back_button_print_view').remove();
-    $('#print_button_print_view').remove();
-};
-
-/**
- * Print page
- */
-Functions.printPage = function () {
-    if (typeof(window.print) !== 'undefined') {
+const PrintPage = {
+    handleEvent: () => {
         window.print();
     }
 };
@@ -4410,14 +3954,20 @@ Functions.printPage = function () {
  * Unbind all event handlers before tearing down a page
  */
 AJAX.registerTeardown('functions.js', function () {
-    $('input#print').off('click');
+    document.querySelectorAll('.jsPrintButton').forEach(item => {
+        item.removeEventListener('click', PrintPage);
+    });
+
     $(document).off('click', 'a.create_view.ajax');
-    $(document).off('keydown', '#createViewDialog input, #createViewDialog select');
+    $(document).off('keydown', '#createViewModal input, #createViewModal select');
     $(document).off('change', '#fkc_checkbox');
 });
 
 AJAX.registerOnload('functions.js', function () {
-    $('input#print').on('click', Functions.printPage);
+    document.querySelectorAll('.jsPrintButton').forEach(item => {
+        item.addEventListener('click', PrintPage);
+    });
+
     $('.logout').on('click', function () {
         var form = $(
             '<form method="POST" action="' + $(this).attr('href') + '" class="disableAjax">' +
@@ -4434,14 +3984,14 @@ AJAX.registerOnload('functions.js', function () {
      */
     $(document).on('click', 'a.create_view.ajax', function (e) {
         e.preventDefault();
-        Functions.createViewDialog($(this));
+        Functions.createViewModal($(this));
     });
     /**
      * Attach Ajax event handlers for input fields in the editor
      * and used to submit the Ajax request when the ENTER key is pressed.
      */
-    if ($('#createViewDialog').length !== 0) {
-        $(document).on('keydown', '#createViewDialog input, #createViewDialog select', function (e) {
+    if ($('#createViewModal').length !== 0) {
+        $(document).on('keydown', '#createViewModal input, #createViewModal select', function (e) {
             if (e.which === 13) { // 13 is the ENTER key
                 e.preventDefault();
 
@@ -4459,7 +4009,7 @@ AJAX.registerOnload('functions.js', function () {
     }
 });
 
-Functions.createViewDialog = function ($this) {
+Functions.createViewModal = function ($this) {
     var $msg = Functions.ajaxShowMessage();
     var sep = CommonParams.get('arg_separator');
     var params = Functions.getJsConfirmCommonParam(this, $this.getPostData());
@@ -4467,40 +4017,30 @@ Functions.createViewDialog = function ($this) {
     $.post($this.attr('href'), params, function (data) {
         if (typeof data !== 'undefined' && data.success === true) {
             Functions.ajaxRemoveMessage($msg);
-            var buttonOptions = {};
-            buttonOptions[Messages.strGo] = function () {
+            $('#createViewModalGoButton').on('click', function () {
                 if (typeof CodeMirror !== 'undefined') {
                     codeMirrorEditor.save();
                 }
                 $msg = Functions.ajaxShowMessage();
-                $.post('index.php?route=/view/create', $('#createViewDialog').find('form').serialize(), function (data) {
+                $.post('index.php?route=/view/create', $('#createViewModal').find('form').serialize(), function (data) {
                     Functions.ajaxRemoveMessage($msg);
                     if (typeof data !== 'undefined' && data.success === true) {
-                        $('#createViewDialog').dialog('close');
+                        $('#createViewModal').modal('hide');
                         $('.result_query').html(data.message);
                         Navigation.reload();
                     } else {
                         Functions.ajaxShowMessage(data.error);
                     }
                 });
-            };
-            buttonOptions[Messages.strClose] = function () {
-                $(this).dialog('close');
-            };
-            var $dialog = $('<div></div>').attr('id', 'createViewDialog').append(data.message).dialog({
-                width: 600,
-                minWidth: 400,
-                height: $(window).height(),
-                modal: true,
-                buttons: buttonOptions,
-                title: Messages.strCreateView,
-                close: function () {
-                    $(this).remove();
-                }
             });
+            $('#createViewModal').find('.modal-body').first().html(data.message);
             // Attach syntax highlighted editor
-            codeMirrorEditor = Functions.getSqlEditor($dialog.find('textarea'));
-            $('input:visible[type=text]', $dialog).first().trigger('focus');
+            $('#createViewModal').on('shown.bs.modal', function () {
+                codeMirrorEditor = Functions.getSqlEditor($('#createViewModal').find('textarea'));
+                $('input:visible[type=text]', $('#createViewModal')).first().trigger('focus');
+                $('#createViewModal').off('shown.bs.modal');
+            });
+            $('#createViewModal').modal('show');
         } else {
             Functions.ajaxShowMessage(data.error);
         }

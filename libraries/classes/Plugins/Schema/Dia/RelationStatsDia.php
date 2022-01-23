@@ -67,7 +67,7 @@ class RelationStatsDia
         $foreign_field
     ) {
         $this->diagram = $diagram;
-        $src_pos  = $this->getXy($master_table, $master_field);
+        $src_pos = $this->getXy($master_table, $master_field);
         $dest_pos = $this->getXy($foreign_table, $foreign_field);
         $this->srcConnPointsLeft = $src_pos[0];
         $this->srcConnPointsRight = $src_pos[1];
@@ -90,8 +90,6 @@ class RelationStatsDia
      * @param string        $column The relation column name
      *
      * @return array Table right,left connection points and key position
-     *
-     * @access private
      */
     private function getXy($table, $column)
     {
@@ -131,8 +129,6 @@ class RelationStatsDia
      *                        this
      *
      * @return bool|void
-     *
-     * @access public
      */
     public function relationDraw($showColor)
     {

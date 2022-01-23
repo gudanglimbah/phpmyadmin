@@ -1,7 +1,4 @@
 <?php
-/**
- * Produce a PDF report (export) from a query
- */
 
 declare(strict_types=1);
 
@@ -14,24 +11,13 @@ use PhpMyAdmin\Properties\Options\Groups\OptionsPropertyRootGroup;
 use PhpMyAdmin\Properties\Options\Items\RadioPropertyItem;
 use PhpMyAdmin\Properties\Options\Items\TextPropertyItem;
 use PhpMyAdmin\Properties\Plugins\ExportPluginProperties;
+use TCPDF;
 
 use function __;
 use function class_exists;
 
-// phpcs:disable PSR1.Files.SideEffects
 /**
- * Skip the plugin if TCPDF is not available.
- */
-if (! class_exists('TCPDF')) {
-    $GLOBALS['skip_import'] = true;
-
-    return;
-}
-
-// phpcs:enable
-
-/**
- * Handles the export for the PDF class
+ * Produce a PDF report (export) from a query
  */
 class ExportPdf extends ExportPlugin
 {
@@ -49,22 +35,18 @@ class ExportPdf extends ExportPlugin
      */
     private $pdfReportTitle = '';
 
-    public function __construct()
+    /**
+     * @psalm-return non-empty-lowercase-string
+     */
+    public function getName(): string
     {
-        parent::__construct();
-
-        // initialize the specific export PDF variables
-        $this->initSpecificVariables();
-
-        $this->setProperties();
+        return 'pdf';
     }
 
     /**
-     * Initialize the local variables that are used for export PDF
-     *
-     * @return void
+     * Initialize the local variables that are used for export PDF.
      */
-    protected function initSpecificVariables()
+    protected function init(): void
     {
         if (! empty($_POST['pdf_report_title'])) {
             $this->pdfReportTitle = $_POST['pdf_report_title'];
@@ -73,12 +55,7 @@ class ExportPdf extends ExportPlugin
         $this->setPdf(new Pdf('L', 'pt', 'A3'));
     }
 
-    /**
-     * Sets the export PDF properties
-     *
-     * @return void
-     */
-    protected function setProperties()
+    protected function setProperties(): ExportPluginProperties
     {
         $exportPluginProperties = new ExportPluginProperties();
         $exportPluginProperties->setText('PDF');
@@ -90,9 +67,7 @@ class ExportPdf extends ExportPlugin
         // create the root group that will be the options field for
         // $exportPluginProperties
         // this will be shown as "Format specific options"
-        $exportSpecificOptions = new OptionsPropertyRootGroup(
-            'Format Specific Options'
-        );
+        $exportSpecificOptions = new OptionsPropertyRootGroup('Format Specific Options');
 
         // general options main group
         $generalOptions = new OptionsPropertyMainGroup('general_opts');
@@ -113,8 +88,8 @@ class ExportPdf extends ExportPlugin
         $leaf = new RadioPropertyItem('structure_or_data');
         $leaf->setValues(
             [
-                'structure'          => __('structure'),
-                'data'               => __('data'),
+                'structure' => __('structure'),
+                'data' => __('data'),
                 'structure_and_data' => __('structure and data'),
             ]
         );
@@ -124,15 +99,14 @@ class ExportPdf extends ExportPlugin
 
         // set the options for the export plugin property item
         $exportPluginProperties->setOptions($exportSpecificOptions);
-        $this->properties = $exportPluginProperties;
+
+        return $exportPluginProperties;
     }
 
     /**
      * Outputs export header
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportHeader()
+    public function exportHeader(): bool
     {
         $pdf = $this->getPdf();
         $pdf->Open();
@@ -146,10 +120,8 @@ class ExportPdf extends ExportPlugin
 
     /**
      * Outputs export footer
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportFooter()
+    public function exportFooter(): bool
     {
         $pdf = $this->getPdf();
 
@@ -162,10 +134,8 @@ class ExportPdf extends ExportPlugin
      *
      * @param string $db      Database name
      * @param string $dbAlias Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBHeader($db, $dbAlias = '')
+    public function exportDBHeader($db, $dbAlias = ''): bool
     {
         return true;
     }
@@ -174,10 +144,8 @@ class ExportPdf extends ExportPlugin
      * Outputs database footer
      *
      * @param string $db Database name
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBFooter($db)
+    public function exportDBFooter($db): bool
     {
         return true;
     }
@@ -188,10 +156,8 @@ class ExportPdf extends ExportPlugin
      * @param string $db         Database name
      * @param string $exportType 'server', 'database', 'table'
      * @param string $dbAlias    Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBCreate($db, $exportType, $dbAlias = '')
+    public function exportDBCreate($db, $exportType, $dbAlias = ''): bool
     {
         return true;
     }
@@ -205,8 +171,6 @@ class ExportPdf extends ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery SQL query for obtaining data
      * @param array  $aliases  Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     public function exportData(
         $db,
@@ -215,7 +179,7 @@ class ExportPdf extends ExportPlugin
         $errorUrl,
         $sqlQuery,
         array $aliases = []
-    ) {
+    ): bool {
         $db_alias = $db;
         $table_alias = $table;
         $this->initAlias($aliases, $db_alias, $table_alias);
@@ -237,8 +201,6 @@ class ExportPdf extends ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery the rawquery to output
      * @param string $crlf     the end of line sequence
-     *
-     * @return bool if succeeded
      */
     public function exportRawQuery(string $errorUrl, string $sqlQuery, string $crlf): bool
     {
@@ -271,8 +233,6 @@ class ExportPdf extends ExportPlugin
      * @param bool   $do_mime     whether to include mime comments
      * @param bool   $dates       whether to include creation/update/check dates
      * @param array  $aliases     aliases for db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     public function exportStructure(
         $db,
@@ -286,7 +246,7 @@ class ExportPdf extends ExportPlugin
         $do_mime = false,
         $dates = false,
         array $aliases = []
-    ) {
+    ): bool {
         $db_alias = $db;
         $table_alias = $table;
         $purpose = '';
@@ -321,29 +281,13 @@ class ExportPdf extends ExportPlugin
         $do_comments = true;
         switch ($exportMode) {
             case 'create_table':
-                $pdf->getTableDef(
-                    $db,
-                    $table,
-                    $do_relation,
-                    $do_comments,
-                    $do_mime,
-                    false,
-                    $aliases
-                );
+                $pdf->getTableDef($db, $table, $do_relation, $do_comments, $do_mime, false, $aliases);
                 break;
             case 'triggers':
                 $pdf->getTriggers($db, $table);
                 break;
             case 'create_view':
-                $pdf->getTableDef(
-                    $db,
-                    $table,
-                    $do_relation,
-                    $do_comments,
-                    $do_mime,
-                    false,
-                    $aliases
-                );
+                $pdf->getTableDef($db, $table, $do_relation, $do_comments, $do_mime, false, $aliases);
                 break;
             case 'stand_in':
                 /* export a stand-in definition to resolve view dependencies
@@ -371,11 +315,14 @@ class ExportPdf extends ExportPlugin
      * Instantiates the PhpMyAdmin\Plugins\Export\Helpers\Pdf class
      *
      * @param Pdf $pdf The instance
-     *
-     * @return void
      */
-    private function setPdf($pdf)
+    private function setPdf($pdf): void
     {
         $this->pdf = $pdf;
+    }
+
+    public function isAvailable(): bool
+    {
+        return class_exists(TCPDF::class);
     }
 }

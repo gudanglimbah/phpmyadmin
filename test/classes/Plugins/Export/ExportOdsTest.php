@@ -14,6 +14,7 @@ use PhpMyAdmin\Properties\Options\Items\HiddenPropertyItem;
 use PhpMyAdmin\Properties\Options\Items\TextPropertyItem;
 use PhpMyAdmin\Properties\Plugins\ExportPluginProperties;
 use PhpMyAdmin\Tests\AbstractTestCase;
+use PhpMyAdmin\Tests\Stubs\DummyResult;
 use ReflectionMethod;
 use ReflectionProperty;
 use stdClass;
@@ -72,10 +73,7 @@ class ExportOdsTest extends AbstractTestCase
         $attrProperties->setAccessible(true);
         $properties = $attrProperties->getValue($this->object);
 
-        $this->assertInstanceOf(
-            ExportPluginProperties::class,
-            $properties
-        );
+        $this->assertInstanceOf(ExportPluginProperties::class, $properties);
 
         $this->assertEquals(
             'OpenDocument Spreadsheet',
@@ -103,10 +101,7 @@ class ExportOdsTest extends AbstractTestCase
 
         $options = $properties->getOptions();
 
-        $this->assertInstanceOf(
-            OptionsPropertyRootGroup::class,
-            $options
-        );
+        $this->assertInstanceOf(OptionsPropertyRootGroup::class, $options);
 
         $this->assertEquals(
             'Format Specific Options',
@@ -116,10 +111,7 @@ class ExportOdsTest extends AbstractTestCase
         $generalOptionsArray = $options->getProperties();
         $generalOptions = $generalOptionsArray[0];
 
-        $this->assertInstanceOf(
-            OptionsPropertyMainGroup::class,
-            $generalOptions
-        );
+        $this->assertInstanceOf(OptionsPropertyMainGroup::class, $generalOptions);
 
         $this->assertEquals(
             'general_opts',
@@ -130,10 +122,7 @@ class ExportOdsTest extends AbstractTestCase
 
         $property = array_shift($generalProperties);
 
-        $this->assertInstanceOf(
-            TextPropertyItem::class,
-            $property
-        );
+        $this->assertInstanceOf(TextPropertyItem::class, $property);
 
         $this->assertEquals(
             'null',
@@ -147,10 +136,7 @@ class ExportOdsTest extends AbstractTestCase
 
         $property = array_shift($generalProperties);
 
-        $this->assertInstanceOf(
-            BoolPropertyItem::class,
-            $property
-        );
+        $this->assertInstanceOf(BoolPropertyItem::class, $property);
 
         $this->assertEquals(
             'columns',
@@ -164,10 +150,7 @@ class ExportOdsTest extends AbstractTestCase
 
         $property = array_shift($generalProperties);
 
-        $this->assertInstanceOf(
-            HiddenPropertyItem::class,
-            $property
-        );
+        $this->assertInstanceOf(HiddenPropertyItem::class, $property);
 
         $this->assertEquals(
             'structure_or_data',
@@ -177,10 +160,7 @@ class ExportOdsTest extends AbstractTestCase
 
     public function testExportHeader(): void
     {
-        $this->assertArrayHasKey(
-            'ods_buffer',
-            $GLOBALS
-        );
+        $this->assertArrayHasKey('ods_buffer', $GLOBALS);
 
         $this->assertTrue(
             $this->object->exportHeader()
@@ -198,25 +178,13 @@ class ExportOdsTest extends AbstractTestCase
             $this->object->exportFooter()
         );
 
-        $this->assertStringContainsString(
-            'header',
-            $GLOBALS['ods_buffer']
-        );
+        $this->assertStringContainsString('header', $GLOBALS['ods_buffer']);
 
-        $this->assertStringContainsString(
-            '</office:spreadsheet>',
-            $GLOBALS['ods_buffer']
-        );
+        $this->assertStringContainsString('</office:spreadsheet>', $GLOBALS['ods_buffer']);
 
-        $this->assertStringContainsString(
-            '</office:body>',
-            $GLOBALS['ods_buffer']
-        );
+        $this->assertStringContainsString('</office:body>', $GLOBALS['ods_buffer']);
 
-        $this->assertStringContainsString(
-            '</office:document-content>',
-            $GLOBALS['ods_buffer']
-        );
+        $this->assertStringContainsString('</office:document-content>', $GLOBALS['ods_buffer']);
     }
 
     public function testExportDBHeader(): void
@@ -265,22 +233,23 @@ class ExportOdsTest extends AbstractTestCase
 
         $flags[] = new FieldMetadata(MYSQLI_TYPE_STRING, 0, (object) []);
 
+        $resultStub = $this->createMock(DummyResult::class);
+
         $dbi->expects($this->once())
             ->method('getFieldsMeta')
-            ->with(true)
+            ->with($resultStub)
             ->will($this->returnValue($flags));
 
         $dbi->expects($this->once())
             ->method('query')
             ->with('SELECT', DatabaseInterface::CONNECT_USER, DatabaseInterface::QUERY_UNBUFFERED)
-            ->will($this->returnValue(true));
+            ->will($this->returnValue($resultStub));
 
-        $dbi->expects($this->once())
+        $resultStub->expects($this->once())
             ->method('numFields')
-            ->with(true)
             ->will($this->returnValue(8));
 
-        $dbi->expects($this->exactly(2))
+        $resultStub->expects($this->exactly(2))
             ->method('fetchRow')
             ->willReturnOnConsecutiveCalls(
                 [
@@ -292,7 +261,8 @@ class ExportOdsTest extends AbstractTestCase
                     't>s',
                     'a&b',
                     '<',
-                ]
+                ],
+                []
             );
 
         $GLOBALS['dbi'] = $dbi;
@@ -348,36 +318,25 @@ class ExportOdsTest extends AbstractTestCase
         $b->length = 20;
         $flags[] = new FieldMetadata(MYSQLI_TYPE_STRING, 0, $b);
 
+        $resultStub = $this->createMock(DummyResult::class);
+
         $dbi->expects($this->once())
             ->method('getFieldsMeta')
-            ->with(true)
+            ->with($resultStub)
             ->will($this->returnValue($flags));
 
         $dbi->expects($this->once())
             ->method('query')
             ->with('SELECT', DatabaseInterface::CONNECT_USER, DatabaseInterface::QUERY_UNBUFFERED)
-            ->will($this->returnValue(true));
+            ->will($this->returnValue($resultStub));
 
-        $dbi->expects($this->once())
+        $resultStub->expects($this->once())
             ->method('numFields')
-            ->with(true)
             ->will($this->returnValue(2));
 
-        $dbi->expects($this->exactly(2))
-            ->method('fieldName')
-            ->willReturnOnConsecutiveCalls(
-                'fna\"me',
-                'fnam/<e2'
-            );
-
-        $dbi->expects($this->exactly(1))
+        $resultStub->expects($this->exactly(1))
             ->method('fetchRow')
-            ->with(true)
-            ->will(
-                $this->returnValue(
-                    null
-                )
-            );
+            ->will($this->returnValue([]));
 
         $GLOBALS['dbi'] = $dbi;
         $GLOBALS['mediawiki_caption'] = true;
@@ -412,29 +371,25 @@ class ExportOdsTest extends AbstractTestCase
 
         $flags = [];
 
+        $resultStub = $this->createMock(DummyResult::class);
+
         $dbi->expects($this->once())
             ->method('getFieldsMeta')
-            ->with(true)
+            ->with($resultStub)
             ->will($this->returnValue($flags));
 
         $dbi->expects($this->once())
             ->method('query')
             ->with('SELECT', DatabaseInterface::CONNECT_USER, DatabaseInterface::QUERY_UNBUFFERED)
-            ->will($this->returnValue(true));
+            ->will($this->returnValue($resultStub));
 
-        $dbi->expects($this->once())
+        $resultStub->expects($this->once())
             ->method('numFields')
-            ->with(true)
             ->will($this->returnValue(0));
 
-        $dbi->expects($this->once())
+        $resultStub->expects($this->once())
             ->method('fetchRow')
-            ->with(true)
-            ->will(
-                $this->returnValue(
-                    null
-                )
-            );
+            ->will($this->returnValue([]));
 
         $GLOBALS['dbi'] = $dbi;
         $GLOBALS['mediawiki_caption'] = true;
@@ -454,8 +409,7 @@ class ExportOdsTest extends AbstractTestCase
         );
 
         $this->assertEquals(
-            '<table:table table:name="table"><table:table-row></table:table-row>' .
-            '</table:table>',
+            '<table:table table:name="table"><table:table-row></table:table-row></table:table>',
             $GLOBALS['ods_buffer']
         );
     }

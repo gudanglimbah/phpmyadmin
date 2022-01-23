@@ -48,6 +48,13 @@ class IndexColumn
     private $cardinality = null;
 
     /**
+     * If the Index uses an expression and not a name
+     *
+     * @var string|null
+     */
+    private $expression = null;
+
+    /**
      * @param array $params an array containing the parameters of the index column
      */
     public function __construct(array $params = [])
@@ -56,13 +63,27 @@ class IndexColumn
     }
 
     /**
+     * If the Index has an expression
+     */
+    public function hasExpression(): bool
+    {
+        return $this->expression !== null;
+    }
+
+    /**
+     * The Index expression if it has one
+     */
+    public function getExpression(): ?string
+    {
+        return $this->expression;
+    }
+
+    /**
      * Sets parameters of the index column
      *
      * @param array $params an array containing the parameters of the index column
-     *
-     * @return void
      */
-    public function set(array $params)
+    public function set(array $params): void
     {
         if (isset($params['Column_name'])) {
             $this->name = $params['Column_name'];
@@ -82,6 +103,10 @@ class IndexColumn
 
         if (isset($params['Sub_part'])) {
             $this->subPart = $params['Sub_part'];
+        }
+
+        if (isset($params['Expression'])) {
+            $this->expression = $params['Expression'];
         }
 
         if (! isset($params['Null'])) {
@@ -171,11 +196,11 @@ class IndexColumn
     public function getCompareData()
     {
         return [
-            'Column_name'   => $this->name,
-            'Seq_in_index'  => $this->seqInIndex,
-            'Collation'     => $this->collation,
-            'Sub_part'      => $this->subPart,
-            'Null'          => $this->null,
+            'Column_name' => $this->name,
+            'Seq_in_index' => $this->seqInIndex,
+            'Collation' => $this->collation,
+            'Sub_part' => $this->subPart,
+            'Null' => $this->null,
         ];
     }
 }

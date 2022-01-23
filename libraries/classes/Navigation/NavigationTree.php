@@ -16,9 +16,10 @@ use PhpMyAdmin\Navigation\Nodes\NodeTable;
 use PhpMyAdmin\Navigation\Nodes\NodeTableContainer;
 use PhpMyAdmin\Navigation\Nodes\NodeViewContainer;
 use PhpMyAdmin\RecentFavoriteTable;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
+use PhpMyAdmin\Util;
 
 use function __;
 use function _ngettext;
@@ -46,7 +47,6 @@ use function sprintf;
 use function strcasecmp;
 use function strlen;
 use function strnatcasecmp;
-use function strpos;
 use function strrpos;
 use function strstr;
 use function substr;
@@ -152,28 +152,27 @@ class NavigationTree
         }
 
         // Get the active node
-        if (isset($_REQUEST['aPath'])) {
-            $this->aPath[0] = $this->parsePath($_REQUEST['aPath']);
-            $this->pos2Name[0] = $_REQUEST['pos2_name'] ?? '';
-            $this->pos2Value[0] = (int) ($_REQUEST['pos2_value'] ?? 0);
-            if (isset($_REQUEST['pos3_name'])) {
-                $this->pos3Name[0] = $_REQUEST['pos3_name'] ?? '';
-                $this->pos3Value[0] = (int) $_REQUEST['pos3_value'];
+        if (isset($_POST['aPath'])) {
+            $this->aPath[0] = $this->parsePath($_POST['aPath']);
+            $this->pos2Name[0] = $_POST['pos2_name'] ?? '';
+            $this->pos2Value[0] = (int) ($_POST['pos2_value'] ?? 0);
+            if (isset($_POST['pos3_name'])) {
+                $this->pos3Name[0] = $_POST['pos3_name'] ?? '';
+                $this->pos3Value[0] = (int) $_POST['pos3_value'];
             }
         } else {
             if (isset($_POST['n0_aPath'])) {
                 $count = 0;
                 while (isset($_POST['n' . $count . '_aPath'])) {
-                    $this->aPath[$count] = $this->parsePath(
-                        $_POST['n' . $count . '_aPath']
-                    );
-                    $index = 'n' . $count . '_pos2_';
-                    $this->pos2Name[$count] = $_POST[$index . 'name'];
-                    $this->pos2Value[$count] = (int) $_POST[$index . 'value'];
-                    $index = 'n' . $count . '_pos3_';
-                    if (isset($_POST[$index])) {
-                        $this->pos3Name[$count] = $_POST[$index . 'name'];
-                        $this->pos3Value[$count] = (int) $_POST[$index . 'value'];
+                    $this->aPath[$count] = $this->parsePath($_POST['n' . $count . '_aPath']);
+                    if (isset($_POST['n' . $count . '_pos2_name'])) {
+                        $this->pos2Name[$count] = $_POST['n' . $count . '_pos2_name'];
+                        $this->pos2Value[$count] = (int) $_POST['n' . $count . '_pos2_value'];
+                    }
+
+                    if (isset($_POST['n' . $count . '_pos3_name'])) {
+                        $this->pos3Name[$count] = $_POST['n' . $count . '_pos3_name'];
+                        $this->pos3Value[$count] = (int) $_POST['n' . $count . '_pos3_value'];
                     }
 
                     $count++;
@@ -181,35 +180,30 @@ class NavigationTree
             }
         }
 
-        if (isset($_REQUEST['vPath'])) {
-            $this->vPath[0] = $this->parsePath($_REQUEST['vPath']);
+        if (isset($_POST['vPath'])) {
+            $this->vPath[0] = $this->parsePath($_POST['vPath']);
         } else {
             if (isset($_POST['n0_vPath'])) {
                 $count = 0;
                 while (isset($_POST['n' . $count . '_vPath'])) {
-                    $this->vPath[$count] = $this->parsePath(
-                        $_POST['n' . $count . '_vPath']
-                    );
+                    $this->vPath[$count] = $this->parsePath($_POST['n' . $count . '_vPath']);
                     $count++;
                 }
             }
         }
 
-        if (isset($_REQUEST['searchClause'])) {
-            $this->searchClause = $_REQUEST['searchClause'];
+        if (isset($_POST['searchClause'])) {
+            $this->searchClause = $_POST['searchClause'];
         }
 
-        if (isset($_REQUEST['searchClause2'])) {
-            $this->searchClause2 = $_REQUEST['searchClause2'];
+        if (isset($_POST['searchClause2'])) {
+            $this->searchClause2 = $_POST['searchClause2'];
         }
 
         // Initialize the tree by creating a root node
         $node = NodeFactory::getInstance('NodeDatabaseContainer', 'root');
         $this->tree = $node;
-        if (
-            ! $GLOBALS['cfg']['NavigationTreeEnableGrouping']
-            || ! $GLOBALS['cfg']['ShowDatabasesNavigationAsTree']
-        ) {
+        if (! $GLOBALS['cfg']['NavigationTreeEnableGrouping'] || ! $GLOBALS['cfg']['ShowDatabasesNavigationAsTree']) {
             return;
         }
 
@@ -224,7 +218,7 @@ class NavigationTree
     {
         $retval = 0;
 
-        if (strlen($GLOBALS['db']) == 0) {
+        if (strlen($GLOBALS['db'] ?? '') === 0) {
             return $retval;
         }
 
@@ -232,9 +226,7 @@ class NavigationTree
          * @todo describe a scenario where this code is executed
          */
         if (! $GLOBALS['cfg']['Server']['DisableIS']) {
-            $dbSeparator = $this->dbi->escapeString(
-                $GLOBALS['cfg']['NavigationTreeDbSeparator']
-            );
+            $dbSeparator = $this->dbi->escapeString($GLOBALS['cfg']['NavigationTreeDbSeparator']);
             $query = 'SELECT (COUNT(DB_first_level) DIV %d) * %d ';
             $query .= 'from ( ';
             $query .= ' SELECT distinct SUBSTRING_INDEX(SCHEMA_NAME, ';
@@ -259,18 +251,14 @@ class NavigationTree
         if ($GLOBALS['dbs_to_test'] === false) {
             $handle = $this->dbi->tryQuery('SHOW DATABASES');
             if ($handle !== false) {
-                while ($arr = $this->dbi->fetchArray($handle)) {
-                    if (strcasecmp($arr[0], $GLOBALS['db']) >= 0) {
+                while ($database = $handle->fetchValue()) {
+                    if (strcasecmp($database, $GLOBALS['db']) >= 0) {
                         break;
                     }
 
-                    $prefix = strstr(
-                        $arr[0],
-                        $GLOBALS['cfg']['NavigationTreeDbSeparator'],
-                        true
-                    );
+                    $prefix = strstr($database, $GLOBALS['cfg']['NavigationTreeDbSeparator'], true);
                     if ($prefix === false) {
-                        $prefix = $arr[0];
+                        $prefix = $database;
                     }
 
                     $prefixMap[$prefix] = 1;
@@ -285,9 +273,7 @@ class NavigationTree
                     continue;
                 }
 
-                while ($arr = $this->dbi->fetchArray($handle)) {
-                    $databases[] = $arr[0];
-                }
+                $databases = array_merge($databases, $handle->fetchAllColumn());
             }
 
             sort($databases);
@@ -296,11 +282,7 @@ class NavigationTree
                     break;
                 }
 
-                $prefix = strstr(
-                    $database,
-                    $GLOBALS['cfg']['NavigationTreeDbSeparator'],
-                    true
-                );
+                $prefix = strstr($database, $GLOBALS['cfg']['NavigationTreeDbSeparator'], true);
                 if ($prefix === false) {
                     $prefix = $database;
                 }
@@ -341,11 +323,7 @@ class NavigationTree
         $retval = $this->tree;
 
         // Add all databases unconditionally
-        $data = $this->tree->getData(
-            'databases',
-            $this->pos,
-            $this->searchClause
-        );
+        $data = $this->tree->getData('databases', $this->pos, $this->searchClause);
         $hiddenCounts = $this->tree->getNavigationHidingData();
         foreach ($data as $db) {
             /** @var NodeDatabase $node */
@@ -408,10 +386,7 @@ class NavigationTree
 
         array_shift($path); // remove db
 
-        if (
-            (count($path) <= 0 || ! array_key_exists($path[0], $containers))
-            && count($containers) != 1
-        ) {
+        if ((count($path) <= 0 || ! array_key_exists($path[0], $containers)) && count($containers) != 1) {
             return $retval;
         }
 
@@ -427,42 +402,23 @@ class NavigationTree
         $retval = $container;
 
         if (count($container->children) <= 1) {
-            $dbData = $db->getData(
-                $container->realName,
-                $pos2,
-                $this->searchClause2
-            );
+            $dbData = $db->getData($container->realName, $pos2, $this->searchClause2);
             foreach ($dbData as $item) {
                 switch ($container->realName) {
                     case 'events':
-                        $node = NodeFactory::getInstance(
-                            'NodeEvent',
-                            $item
-                        );
+                        $node = NodeFactory::getInstance('NodeEvent', $item);
                         break;
                     case 'functions':
-                        $node = NodeFactory::getInstance(
-                            'NodeFunction',
-                            $item
-                        );
+                        $node = NodeFactory::getInstance('NodeFunction', $item);
                         break;
                     case 'procedures':
-                        $node = NodeFactory::getInstance(
-                            'NodeProcedure',
-                            $item
-                        );
+                        $node = NodeFactory::getInstance('NodeProcedure', $item);
                         break;
                     case 'tables':
-                        $node = NodeFactory::getInstance(
-                            'NodeTable',
-                            $item
-                        );
+                        $node = NodeFactory::getInstance('NodeTable', $item);
                         break;
                     case 'views':
-                        $node = NodeFactory::getInstance(
-                            'NodeView',
-                            $item
-                        );
+                        $node = NodeFactory::getInstance('NodeView', $item);
                         break;
                     default:
                         break;
@@ -496,10 +452,7 @@ class NavigationTree
                 return false;
             }
 
-            $node = NodeFactory::getInstance(
-                'NodeTable',
-                $path[0]
-            );
+            $node = NodeFactory::getInstance('NodeTable', $path[0]);
             if ($type2 == $container->realName) {
                 $node->pos2 = $pos2;
             }
@@ -509,45 +462,25 @@ class NavigationTree
         }
 
         $retval = $table ?? false;
-        $containers = $this->addTableContainers(
-            $table,
-            $pos2,
-            $type3,
-            $pos3
-        );
+        $containers = $this->addTableContainers($table, $pos2, $type3, $pos3);
         array_shift($path); // remove table
-        if (
-            count($path) <= 0
-            || ! array_key_exists($path[0], $containers)
-        ) {
+        if (count($path) <= 0 || ! array_key_exists($path[0], $containers)) {
             return $retval;
         }
 
         $container = $table->getChild($path[0], true);
         $retval = $container ?? false;
-        $tableData = $table->getData(
-            $container->realName,
-            $pos3
-        );
+        $tableData = $table->getData($container->realName, $pos3);
         foreach ($tableData as $item) {
             switch ($container->realName) {
                 case 'indexes':
-                    $node = NodeFactory::getInstance(
-                        'NodeIndex',
-                        $item
-                    );
+                    $node = NodeFactory::getInstance('NodeIndex', $item);
                     break;
                 case 'columns':
-                    $node = NodeFactory::getInstance(
-                        'NodeColumn',
-                        $item
-                    );
+                    $node = NodeFactory::getInstance('NodeColumn', $item);
                     break;
                 case 'triggers':
-                    $node = NodeFactory::getInstance(
-                        'NodeTrigger',
-                        $item
-                    );
+                    $node = NodeFactory::getInstance('NodeTrigger', $item);
                     break;
                 default:
                     break;
@@ -590,21 +523,15 @@ class NavigationTree
         $retval = [];
         if ($table->hasChildren(true) == 0) {
             if ($table->getPresence('columns')) {
-                $retval['columns'] = NodeFactory::getInstance(
-                    'NodeColumnContainer'
-                );
+                $retval['columns'] = NodeFactory::getInstance('NodeColumnContainer');
             }
 
             if ($table->getPresence('indexes')) {
-                $retval['indexes'] = NodeFactory::getInstance(
-                    'NodeIndexContainer'
-                );
+                $retval['indexes'] = NodeFactory::getInstance('NodeIndexContainer');
             }
 
             if ($table->getPresence('triggers')) {
-                $retval['triggers'] = NodeFactory::getInstance(
-                    'NodeTriggerContainer'
-                );
+                $retval['triggers'] = NodeFactory::getInstance('NodeTriggerContainer');
             }
 
             // Add all new Nodes to the tree
@@ -648,71 +575,46 @@ class NavigationTree
     {
         // Get items to hide
         $hidden = $db->getHiddenItems('group');
-        if (
-            ! $GLOBALS['cfg']['NavigationTreeShowTables']
-            && ! in_array('tables', $hidden)
-        ) {
+        if (! $GLOBALS['cfg']['NavigationTreeShowTables'] && ! in_array('tables', $hidden)) {
             $hidden[] = 'tables';
         }
 
-        if (
-            ! $GLOBALS['cfg']['NavigationTreeShowViews']
-            && ! in_array('views', $hidden)
-        ) {
+        if (! $GLOBALS['cfg']['NavigationTreeShowViews'] && ! in_array('views', $hidden)) {
             $hidden[] = 'views';
         }
 
-        if (
-            ! $GLOBALS['cfg']['NavigationTreeShowFunctions']
-            && ! in_array('functions', $hidden)
-        ) {
+        if (! $GLOBALS['cfg']['NavigationTreeShowFunctions'] && ! in_array('functions', $hidden)) {
             $hidden[] = 'functions';
         }
 
-        if (
-            ! $GLOBALS['cfg']['NavigationTreeShowProcedures']
-            && ! in_array('procedures', $hidden)
-        ) {
+        if (! $GLOBALS['cfg']['NavigationTreeShowProcedures'] && ! in_array('procedures', $hidden)) {
             $hidden[] = 'procedures';
         }
 
-        if (
-            ! $GLOBALS['cfg']['NavigationTreeShowEvents']
-            && ! in_array('events', $hidden)
-        ) {
+        if (! $GLOBALS['cfg']['NavigationTreeShowEvents'] && ! in_array('events', $hidden)) {
             $hidden[] = 'events';
         }
 
         $retval = [];
         if ($db->hasChildren(true) == 0) {
             if (! in_array('tables', $hidden) && $db->getPresence('tables')) {
-                $retval['tables'] = NodeFactory::getInstance(
-                    'NodeTableContainer'
-                );
+                $retval['tables'] = NodeFactory::getInstance('NodeTableContainer');
             }
 
             if (! in_array('views', $hidden) && $db->getPresence('views')) {
-                $retval['views'] = NodeFactory::getInstance(
-                    'NodeViewContainer'
-                );
+                $retval['views'] = NodeFactory::getInstance('NodeViewContainer');
             }
 
             if (! in_array('functions', $hidden) && $db->getPresence('functions')) {
-                $retval['functions'] = NodeFactory::getInstance(
-                    'NodeFunctionContainer'
-                );
+                $retval['functions'] = NodeFactory::getInstance('NodeFunctionContainer');
             }
 
             if (! in_array('procedures', $hidden) && $db->getPresence('procedures')) {
-                $retval['procedures'] = NodeFactory::getInstance(
-                    'NodeProcedureContainer'
-                );
+                $retval['procedures'] = NodeFactory::getInstance('NodeProcedureContainer');
             }
 
             if (! in_array('events', $hidden) && $db->getPresence('events')) {
-                $retval['events'] = NodeFactory::getInstance(
-                    'NodeEventContainer'
-                );
+                $retval['events'] = NodeFactory::getInstance('NodeEventContainer');
             }
 
             // Add all new Nodes to the tree
@@ -763,10 +665,7 @@ class NavigationTree
      */
     public function groupNode($node): void
     {
-        if (
-            $node->type != Node::CONTAINER
-            || ! $GLOBALS['cfg']['NavigationTreeEnableExpansion']
-        ) {
+        if ($node->type != Node::CONTAINER || ! $GLOBALS['cfg']['NavigationTreeEnableExpansion']) {
             return;
         }
 
@@ -835,11 +734,13 @@ class NavigationTree
             unset($prefixes[$key]);
         }
 
+        $numChildren = count($node->children);
+
         // rfe #1634 Don't group if there's only one group and no other items
         if (count($prefixes) === 1) {
             $keys = array_keys($prefixes);
             $key = $keys[0];
-            if ($prefixes[$key] == count($node->children) - 1) {
+            if ($prefixes[$key] == $numChildren - 1) {
                 unset($prefixes[$key]);
             }
         }
@@ -864,48 +765,14 @@ class NavigationTree
                 $this->largeGroupWarning = true;
             }
 
-            $groups[$key] = new Node(
-                htmlspecialchars((string) $key),
-                Node::CONTAINER,
-                true
-            );
-            $groups[$key]->separator = $node->separator;
-            $groups[$key]->separatorDepth = $node->separatorDepth - 1;
-            $groups[$key]->icon = ['image' => 'b_group', 'title' => __('Groups')];
-            $groups[$key]->pos2 = $node->pos2;
-            $groups[$key]->pos3 = $node->pos3;
-            if (
-                $node instanceof NodeTableContainer
-                || $node instanceof NodeViewContainer
-            ) {
-                $groups[$key]->links = [
-                    'text' => [
-                        'route' => $node->links['text']['route'],
-                        'params' => array_merge($node->links['text']['params'], ['tbl_group' => $key]),
-                    ],
-                    'icon' => [
-                        'route' => $node->links['icon']['route'],
-                        'params' => array_merge($node->links['icon']['params'], ['tbl_group' => $key]),
-                    ],
-                ];
-            }
-
-            $node->addChild($groups[$key]);
+            $newChildren = [];
             foreach ($separators as $separator) {
                 $separatorLength = strlen($separator);
                 // FIXME: this could be more efficient
                 foreach ($node->children as $child) {
                     $keySeparatorLength = mb_strlen((string) $key) + $separatorLength;
-                    $nameSubstring = mb_substr(
-                        (string) $child->name,
-                        0,
-                        $keySeparatorLength
-                    );
-                    if (
-                        ($nameSubstring != $key . $separator
-                        && $child->name != $key)
-                        || $child->type != Node::OBJECT
-                    ) {
+                    $nameSubstring = mb_substr((string) $child->name, 0, $keySeparatorLength);
+                    if (($nameSubstring != $key . $separator && $child->name != $key) || $child->type != Node::OBJECT) {
                         continue;
                     }
 
@@ -920,10 +787,7 @@ class NavigationTree
                             $keySeparatorLength
                         )
                     );
-                    if (
-                        $child instanceof NodeDatabase
-                        && $child->getHiddenCount() > 0
-                    ) {
+                    if ($child instanceof NodeDatabase && $child->getHiddenCount() > 0) {
                         $newChild->setHiddenCount($child->getHiddenCount());
                     }
 
@@ -932,19 +796,71 @@ class NavigationTree
                     $newChild->links = $child->links;
                     $newChild->pos2 = $child->pos2;
                     $newChild->pos3 = $child->pos3;
-                    $groups[$key]->addChild($newChild);
                     foreach ($child->children as $elm) {
                         $newChild->addChild($elm);
                     }
 
-                    $node->removeChild($child->name);
+                    $newChildren[] = [
+                        'node' => $newChild,
+                        'replaces_name' => $child->name,
+                    ];
+                }
+            }
+
+            if (count($newChildren) === 0) {
+                continue;
+            }
+
+            // If the current node is a standard group (not NodeTableContainer, etc.)
+            // and the new group contains all of the current node's children, combine them
+            $class = get_class($node);
+            if (count($newChildren) === $numChildren && substr($class, strrpos($class, '\\') + 1) === 'Node') {
+                $node->name .= $separators[0] . htmlspecialchars((string) $key);
+                $node->realName .= $separators[0] . htmlspecialchars((string) $key);
+                $node->separatorDepth--;
+                foreach ($newChildren as $newChild) {
+                    $node->removeChild($newChild['replaces_name']);
+                    $node->addChild($newChild['node']);
+                }
+            } else {
+                $groups[$key] = new Node(
+                    htmlspecialchars((string) $key),
+                    Node::CONTAINER,
+                    true
+                );
+                $groups[$key]->separator = $node->separator;
+                $groups[$key]->separatorDepth = $node->separatorDepth - 1;
+                $groups[$key]->icon = ['image' => 'b_group', 'title' => __('Groups')];
+                $groups[$key]->pos2 = $node->pos2;
+                $groups[$key]->pos3 = $node->pos3;
+                if ($node instanceof NodeTableContainer || $node instanceof NodeViewContainer) {
+                    $groups[$key]->links = [
+                        'text' => [
+                            'route' => $node->links['text']['route'],
+                            'params' => array_merge($node->links['text']['params'], ['tbl_group' => $key]),
+                        ],
+                        'icon' => [
+                            'route' => $node->links['icon']['route'],
+                            'params' => array_merge($node->links['icon']['params'], ['tbl_group' => $key]),
+                        ],
+                    ];
+                }
+
+                foreach ($newChildren as $newChild) {
+                    $node->removeChild($newChild['replaces_name']);
+                    $groups[$key]->addChild($newChild['node']);
                 }
             }
         }
 
-        foreach ($prefixes as $key => $value) {
-            $this->groupNode($groups[$key]);
-            $groups[$key]->classes = 'navGroup';
+        foreach ($groups as $group) {
+            if (count($group->children) === 0) {
+                continue;
+            }
+
+            $node->addChild($group);
+            $this->groupNode($group);
+            $group->classes = 'navGroup';
         }
     }
 
@@ -975,18 +891,7 @@ class NavigationTree
         ]);
         $this->setVisibility();
 
-        $nodes = '';
-        for ($i = 0, $nbChildren = count($children); $i < $nbChildren; $i++) {
-            if ($i == 0) {
-                $nodes .= $this->renderNode($children[0], true, 'first');
-            } else {
-                if ($i + 1 != $nbChildren) {
-                    $nodes .= $this->renderNode($children[$i], true);
-                } else {
-                    $nodes .= $this->renderNode($children[$i], true, 'last');
-                }
-            }
-        }
+        $nodes = $this->renderNodes($children);
 
         return $this->template->render('navigation/tree/state', [
             'quick_warp' => $quickWarp,
@@ -1016,13 +921,7 @@ class NavigationTree
                 'sortNode',
             ]);
 
-            for ($i = 0, $nbChildren = count($children); $i < $nbChildren; $i++) {
-                if ($i + 1 != $nbChildren) {
-                    $listContent .= $this->renderNode($children[$i], true);
-                } else {
-                    $listContent .= $this->renderNode($children[$i], true, 'last');
-                }
-            }
+            $listContent .= $this->renderNodes($children, false);
 
             if (! $GLOBALS['cfg']['ShowDatabasesNavigationAsTree']) {
                 $parents = $node->parents(true);
@@ -1036,16 +935,10 @@ class NavigationTree
             if (! empty($this->searchClause2)) {
                 if (is_object($node->realParent())) {
                     $results = $node->realParent()
-                        ->getPresence(
-                            $node->realName,
-                            $this->searchClause2
-                        );
+                        ->getPresence($node->realName, $this->searchClause2);
                 }
             } else {
-                $results = $this->tree->getPresence(
-                    'databases',
-                    $this->searchClause
-                );
+                $results = $this->tree->getPresence('databases', $this->searchClause);
             }
 
             $results = sprintf(
@@ -1056,11 +949,8 @@ class NavigationTree
                 ),
                 $results
             );
-            Response::getInstance()
-                ->addJSON(
-                    'results',
-                    $results
-                );
+            ResponseRenderer::getInstance()
+                ->addJSON('results', $results);
         }
 
         if ($node !== false) {
@@ -1080,24 +970,26 @@ class NavigationTree
      * side to know which page(s) we will be requesting data from
      *
      * @param Node $node The node to create the pagination parameters for
+     *
+     * @return array<string, string>
      */
-    private function getPaginationParamsHtml(Node $node): string
+    private function getPaginationParamsHtml(Node $node): array
     {
-        $renderDetails = ['position' => 0];
+        $renderDetails = [];
         $paths = $node->getPaths();
         if (isset($paths['aPath_clean'][2])) {
             $renderDetails['position'] = 'pos2_nav';
-            $renderDetails['data_name'] = $paths['aPath_clean'][2];
+            $renderDetails['data_name'] = (string) $paths['aPath_clean'][2];
             $renderDetails['data_value'] = (string) $node->pos2;
         }
 
         if (isset($paths['aPath_clean'][4])) {
             $renderDetails['position'] = 'pos3_nav';
-            $renderDetails['data_name'] = $paths['aPath_clean'][4];
+            $renderDetails['data_name'] = (string) $paths['aPath_clean'][4];
             $renderDetails['data_value'] = (string) $node->pos3;
         }
 
-        return $this->template->render('navigation/tree/pagination_params', $renderDetails);
+        return $renderDetails;
     }
 
     /**
@@ -1127,43 +1019,56 @@ class NavigationTree
     }
 
     /**
+     * @param Node[] $children
+     */
+    private function renderNodes(array $children, bool $hasFirstClass = true): string
+    {
+        $nodes = '';
+        for ($i = 0, $nbChildren = count($children); $i < $nbChildren; $i++) {
+            if ($i === 0) {
+                $nodes .= $this->renderNode($children[0], $hasFirstClass ? 'first' : '');
+            } elseif ($i + 1 !== $nbChildren) {
+                $nodes .= $this->renderNode($children[$i]);
+            } else {
+                $nodes .= $this->renderNode($children[$i], 'last');
+            }
+        }
+
+        return $nodes;
+    }
+
+    /**
      * Renders a single node or a branch of the tree
      *
-     * @param Node   $node      The node to render
-     * @param bool   $recursive Whether to render a single node or a branch
-     * @param string $class     An additional class for the list item
+     * @param Node   $node  The node to render
+     * @param string $class An additional class for the list item
      *
      * @return string HTML code for the tree node or branch
      */
-    private function renderNode(Node $node, bool $recursive, string $class = ''): string
+    private function renderNode(Node $node, string $class = ''): string
     {
-        $retval = '';
+        $controlButtons = '';
         $paths = $node->getPaths();
         $nodeIsContainer = $node->type === Node::CONTAINER;
+        $liClasses = '';
 
-        if (
-            $node->hasSiblings()
-            || $node->realParent() === false
-        ) {
-            $response = Response::getInstance();
-            if (
-                $nodeIsContainer
-                && count($node->children) === 0
-                && ! $response->isAjax()
-            ) {
+        // Whether to show the node in the tree (true for all nodes but root)
+        // If false, the node's children will still be shown, but as children of the node's parent
+        $showNode = $node->hasSiblings() || count($node->parents(false, true)) > 0;
+
+        // Don't show the 'Tables' node under each database unless it has 'Views', etc. as a sibling
+        if ($node instanceof NodeTableContainer && ! $node->hasSiblings()) {
+            $showNode = false;
+        }
+
+        if ($showNode) {
+            $response = ResponseRenderer::getInstance();
+            if ($nodeIsContainer && count($node->children) === 0 && ! $response->isAjax()) {
                 return '';
             }
 
-            $retval .= '<li class="' . trim($class . ' ' . $node->classes) . '">';
-            $sterile = [
-                'events',
-                'triggers',
-                'functions',
-                'procedures',
-                'views',
-                'columns',
-                'indexes',
-            ];
+            $liClasses = trim($class . ' ' . $node->classes);
+            $sterile = ['events', 'triggers', 'functions', 'procedures', 'views', 'columns', 'indexes'];
             $parentName = '';
             $parents = $node->parents(false, true);
             if (count($parents)) {
@@ -1171,58 +1076,19 @@ class NavigationTree
             }
 
             // if node name itself is in sterile, then allow
-            if (
-                $node->isGroup
+            $nodeIsGroup = $node->isGroup
                 || (! in_array($parentName, $sterile) && ! $node->isNew)
-                || (in_array($node->realName, $sterile) && ! empty($node->children))
-            ) {
-                $retval .= "<div class='block'>";
-                $iClass = '';
-                if ($class === 'first') {
-                    $iClass = " class='first'";
+                || (in_array($node->realName, $sterile) && ! empty($node->children));
+            if ($nodeIsGroup) {
+                $match = $this->findTreeMatch($this->vPath, $paths['vPath_clean']);
+                $linkClasses = $node->getCssClasses($match);
+                if ($GLOBALS['cfg']['ShowDatabasesNavigationAsTree'] || $parentName !== 'root') {
+                    $nodeIcon = $node->getIcon($match);
                 }
-
-                $retval .= '<i' . $iClass . '></i>';
-                if (strpos($class, 'last') === false) {
-                    $retval .= '<b></b>';
-                }
-
-                $match = $this->findTreeMatch(
-                    $this->vPath,
-                    $paths['vPath_clean']
-                );
-
-                $retval .= '<a class="' . $node->getCssClasses($match) . '"';
-                $retval .= " href='#'>";
-
-                $retval .= '<span class="hide paths_nav"';
-                $retval .= ' data-apath="' . $paths['aPath'] . '"';
-                $retval .= ' data-vpath="' . $paths['vPath'] . '"';
-                $retval .= ' data-pos="' . $this->pos . '"';
-                $retval .= '"></span>';
-                $retval .= $this->getPaginationParamsHtml($node);
-                if (
-                    $GLOBALS['cfg']['ShowDatabasesNavigationAsTree']
-                    || $parentName !== 'root'
-                ) {
-                    $retval .= $node->getIcon($match);
-                }
-
-                $retval .= '</a>';
-                $retval .= '</div>';
-            } else {
-                $retval .= "<div class='block'>";
-                $iClass = '';
-                if ($class === 'first') {
-                    $iClass = " class='first'";
-                }
-
-                $retval .= '<i' . $iClass . '></i>';
-                $retval .= $this->getPaginationParamsHtml($node);
-                $retval .= '</div>';
             }
 
-            $linkClass = '';
+            $paginationParams = $this->getPaginationParamsHtml($node);
+
             $haveAjax = [
                 'functions',
                 'procedures',
@@ -1232,26 +1098,8 @@ class NavigationTree
             ];
             $parent = $node->parents(false, true);
             $isNewView = $parent[0]->realName === 'views' && $node->isNew === true;
-            if (
-                $parent[0]->type == Node::CONTAINER
-                && (in_array($parent[0]->realName, $haveAjax) || $isNewView)
-            ) {
-                $linkClass = ' ajax';
-            }
-
-            if ($nodeIsContainer) {
-                $retval .= '<i>';
-            }
-
-            // The .second class is used in js/src/navigation.js
-            $divClass = 'second';
-
-            if (isset($node->secondIcon)) {
-                // Generates: .second double class for NavigationTreeDefaultTabTable2
-                $divClass .= ' double';
-            }
-
-            $retval .= '<div class="block ' . $divClass . '">';
+            $linkHasAjaxClass = $parent[0]->type == Node::CONTAINER
+                && (in_array($parent[0]->realName, $haveAjax) || $isNewView);
 
             if (! $node->isGroup) {
                 $args = [];
@@ -1264,123 +1112,86 @@ class NavigationTree
                     $args[$parent->urlParamName] = $parent->realName;
                 }
 
-                $params = array_merge(
-                    $node->links['icon']['params'],
-                    array_intersect_key($args, $node->links['icon']['params'])
-                );
-                $link = Url::getFromRoute($node->links['icon']['route'], $params);
-
-                $retval .= '<a';
-
-                if ($linkClass !== '') {
-                    $retval .= ' class="' . $linkClass . '"';
-                }
-
-                $retval .= ' href="' . $link . '">';
-                $retval .= Generator::getImage($node->icon['image'], $node->icon['title']) . '</a>';
+                $iconLinks = [];
+                $iconLinks[] = [
+                    'route' => $node->links['icon']['route'],
+                    'params' => array_merge(
+                        $node->links['icon']['params'],
+                        array_intersect_key($args, $node->links['icon']['params'])
+                    ),
+                    'is_ajax' => $linkHasAjaxClass,
+                    'image' => $node->icon['image'],
+                    'title' => $node->icon['title'],
+                ];
 
                 if (isset($node->links['second_icon'], $node->secondIcon)) {
-                    $params = array_merge(
-                        $node->links['second_icon']['params'],
-                        array_intersect_key($args, $node->links['second_icon']['params'])
-                    );
-                    $link = Url::getFromRoute($node->links['second_icon']['route'], $params);
-
-                    $retval .= '<a';
-
-                    if ($linkClass !== '') {
-                        $retval .= ' class="' . $linkClass . '"';
-                    }
-
-                    $retval .= ' href="' . $link . '">';
-                    $retval .= Generator::getImage($node->secondIcon['image'], $node->secondIcon['title']) . '</a>';
+                    $iconLinks[] = [
+                        'route' => $node->links['second_icon']['route'],
+                        'params' => array_merge(
+                            $node->links['second_icon']['params'],
+                            array_intersect_key($args, $node->links['second_icon']['params'])
+                        ),
+                        'is_ajax' => $linkHasAjaxClass,
+                        'image' => $node->secondIcon['image'],
+                        'title' => $node->secondIcon['title'],
+                    ];
                 }
 
-                $retval .= '</div>';
-
-                $params = array_merge(
-                    $node->links['text']['params'],
-                    array_intersect_key($args, $node->links['text']['params'])
-                );
-                $link = Url::getFromRoute($node->links['text']['route'], $params);
-
-                $title = $node->links['title'] ?? $node->title ?? '';
-                if ($nodeIsContainer) {
-                    $retval .= "&nbsp;<a class='hover_show_full' href='" . $link . "'>";
-                    $retval .= htmlspecialchars($node->name);
-                    $retval .= '</a>';
-                } else {
-                    $retval .= "<a class='hover_show_full" . $linkClass . "' href='" . $link . "'";
-                    $retval .= " title='" . $title . "'>";
-                    $retval .= htmlspecialchars($node->displayName ?? $node->realName);
-                    $retval .= '</a>';
-                }
-            } else {
-                $retval .= '<u>' . Generator::getImage($node->icon['image'], $node->icon['title']) . '</u>';
-                $retval .= '</div>';
-                $retval .= '&nbsp;' . $node->name . '';
+                $textLink = [
+                    'route' => $node->links['text']['route'],
+                    'params' => array_merge(
+                        $node->links['text']['params'],
+                        array_intersect_key($args, $node->links['text']['params'])
+                    ),
+                    'is_ajax' => $linkHasAjaxClass,
+                    'title' => $node->links['title'] ?? $node->title ?? '',
+                ];
             }
 
-            $retval .= $node->getHtmlForControlButtons();
-            if ($nodeIsContainer) {
-                $retval .= '</i>';
-            }
-
-            $retval .= '<div class="clearfloat"></div>';
+            $controlButtons .= $node->getHtmlForControlButtons();
             $wrap = true;
         } else {
             $node->visible = true;
             $wrap = false;
-            $retval .= $this->getPaginationParamsHtml($node);
+            $paginationParams = $this->getPaginationParamsHtml($node);
         }
 
-        if ($recursive) {
-            $hide = '';
-            if (! $node->visible) {
-                $hide = " style='display: none;'";
+        $children = $node->children;
+        usort($children, [self::class, 'sortNode']);
+        $buffer = '';
+        $extraClass = '';
+        for ($i = 0, $nbChildren = count($children); $i < $nbChildren; $i++) {
+            if ($i + 1 == $nbChildren) {
+                $extraClass = ' last';
             }
 
-            $children = $node->children;
-            usort(
-                $children,
-                [
-                    self::class,
-                    'sortNode',
-                ]
-            );
-            $buffer = '';
-            $extraClass = '';
-            for ($i = 0, $nbChildren = count($children); $i < $nbChildren; $i++) {
-                if ($i + 1 == $nbChildren) {
-                    $extraClass = ' last';
-                }
-
-                $buffer .= $this->renderNode(
-                    $children[$i],
-                    true,
-                    $children[$i]->classes . $extraClass
-                );
-            }
-
-            if (! empty($buffer)) {
-                if ($wrap) {
-                    $retval .= '<div' . $hide . " class='list_container'><ul>";
-                }
-
-                $retval .= $this->fastFilterHtml($node);
-                $retval .= $this->getPageSelector($node);
-                $retval .= $buffer;
-                if ($wrap) {
-                    $retval .= '</ul></div>';
-                }
-            }
+            $buffer .= $this->renderNode($children[$i], $children[$i]->classes . $extraClass);
         }
 
-        if ($node->hasSiblings()) {
-            $retval .= '</li>';
+        if (! empty($buffer)) {
+            $recursiveHtml = $this->fastFilterHtml($node);
+            $recursiveHtml .= $this->getPageSelector($node);
+            $recursiveHtml .= $buffer;
         }
 
-        return $retval;
+        return $this->template->render('navigation/tree/node', [
+            'node' => $node,
+            'class' => $class,
+            'show_node' => $showNode,
+            'has_siblings' => $node->hasSiblings(),
+            'li_classes' => $liClasses,
+            'control_buttons' => $controlButtons,
+            'node_is_container' => $nodeIsContainer,
+            'has_second_icon' => isset($node->secondIcon),
+            'recursive' => ['html' => $recursiveHtml ?? '', 'has_wrapper' => $wrap, 'is_hidden' => ! $node->visible],
+            'icon_links' => $iconLinks ?? [],
+            'text_link' => $textLink ?? [],
+            'pagination_params' => $paginationParams,
+            'node_is_group' => $nodeIsGroup ?? false,
+            'link_classes' => $linkClasses ?? '',
+            'paths' => ['a_path' => $paths['aPath'] ?? '', 'v_path' => $paths['vPath'] ?? '', 'pos' => $this->pos],
+            'node_icon' => $nodeIcon ?? '',
+        ]);
     }
 
     /**
@@ -1441,18 +1252,9 @@ class NavigationTree
         ]);
         $this->setVisibility();
 
-        $nodes = '';
-        for ($i = 0, $nbChildren = count($children); $i < $nbChildren; $i++) {
-            if ($i == 0) {
-                $nodes .= $this->renderNode($children[0], true, 'first');
-            } else {
-                if ($i + 1 != $nbChildren) {
-                    $nodes .= $this->renderNode($children[$i], true);
-                } else {
-                    $nodes .= $this->renderNode($children[$i], true, 'last');
-                }
-            }
-        }
+        $nodes = $this->renderNodes($children);
+
+        $databaseUrl = Util::getScriptNameForOption($GLOBALS['cfg']['DefaultTabDatabase'], 'database');
 
         return $this->template->render('navigation/tree/database_select', [
             'quick_warp' => $quickWarp,
@@ -1460,6 +1262,7 @@ class NavigationTree
             'server' => $GLOBALS['server'],
             'options' => $options,
             'nodes' => $nodes,
+            'database_url' => $databaseUrl,
         ]);
     }
 
@@ -1512,10 +1315,10 @@ class NavigationTree
             ) {
                 $paths = $node->getPaths();
                 $urlParams = [
-                    'pos'        => $this->pos,
-                    'aPath'      => $paths['aPath'],
-                    'vPath'      => $paths['vPath'],
-                    'pos2_name'  => $node->realName,
+                    'pos' => $this->pos,
+                    'aPath' => $paths['aPath'],
+                    'vPath' => $paths['vPath'],
+                    'pos2_name' => $node->realName,
                     'pos2_value' => 0,
                 ];
             }
@@ -1554,14 +1357,7 @@ class NavigationTree
             $title = __('Unlink from main panel');
         }
 
-        $unlink = Generator::getNavigationLink(
-            '#',
-            $showText,
-            $title,
-            $showIcon,
-            $syncImage,
-            'pma_navigation_sync'
-        );
+        $unlink = Generator::getNavigationLink('#', $showText, $title, $showIcon, $syncImage, 'pma_navigation_sync');
 
         return $this->template->render('navigation/tree/controls', [
             'collapse_all' => $collapseAll,
@@ -1595,10 +1391,10 @@ class NavigationTree
 
                 $level = isset($paths['aPath_clean'][4]) ? 3 : 2;
                 $urlParams = [
-                    'aPath'     => $paths['aPath'],
-                    'vPath'     => $paths['vPath'],
-                    'pos'       => $this->pos,
-                    'server'    => $GLOBALS['server'],
+                    'aPath' => $paths['aPath'],
+                    'vPath' => $paths['vPath'],
+                    'pos' => $this->pos,
+                    'server' => $GLOBALS['server'],
                     'pos2_name' => $paths['aPath_clean'][2],
                 ];
                 if ($level == 3) {
@@ -1611,10 +1407,7 @@ class NavigationTree
 
                 /** @var Node $realParent */
                 $realParent = $node->realParent();
-                $num = $realParent->getPresence(
-                    $node->realName,
-                    $this->searchClause2
-                );
+                $num = $realParent->getPresence($node->realName, $this->searchClause2);
                 $retval .= Generator::getListNavigator(
                     $num,
                     $pos,

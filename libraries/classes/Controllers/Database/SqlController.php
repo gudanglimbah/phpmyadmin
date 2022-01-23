@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Controllers\Database;
 
 use PhpMyAdmin\Config\PageSettings;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\SqlQueryForm;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
@@ -21,17 +21,13 @@ class SqlController extends AbstractController
     /** @var SqlQueryForm */
     private $sqlQueryForm;
 
-    /**
-     * @param Response $response
-     * @param string   $db       Database name
-     */
-    public function __construct($response, Template $template, $db, SqlQueryForm $sqlQueryForm)
+    public function __construct(ResponseRenderer $response, Template $template, string $db, SqlQueryForm $sqlQueryForm)
     {
         parent::__construct($response, $template, $db);
         $this->sqlQueryForm = $sqlQueryForm;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $goto, $back, $db, $cfg, $errorUrl;
 

@@ -7,12 +7,14 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin;
 
+use BaconQrCode\Renderer\ImageRenderer;
+use CodeLts\U2F\U2FServer\U2FServer;
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\Plugins\TwoFactor\Application;
 use PhpMyAdmin\Plugins\TwoFactor\Invalid;
 use PhpMyAdmin\Plugins\TwoFactor\Key;
 use PhpMyAdmin\Plugins\TwoFactorPlugin;
 use PragmaRX\Google2FAQRCode\Google2FA;
-use Samyoul\U2F\U2FServer\U2FServer;
 
 use function array_merge;
 use function class_exists;
@@ -51,7 +53,7 @@ class TwoFactor
     {
         global $dbi;
 
-        $dbi->initRelationParamsCache();
+        (new Relation($dbi))->initRelationParamsCache();
 
         $this->userPreferences = new UserPreferences();
         $this->user = $user;
@@ -123,7 +125,7 @@ class TwoFactor
             $result[] = 'simple';
         }
 
-        if (class_exists(Google2FA::class) && class_exists('BaconQrCode\Renderer\ImageRenderer')) {
+        if (class_exists(Google2FA::class) && class_exists(ImageRenderer::class)) {
             $result[] = 'application';
         }
 
@@ -149,7 +151,7 @@ class TwoFactor
             ];
         }
 
-        if (! class_exists('BaconQrCode\Renderer\ImageRenderer')) {
+        if (! class_exists(ImageRenderer::class)) {
             $result[] = [
                 'class' => Application::getName(),
                 'dep' => 'bacon/bacon-qr-code',
@@ -159,7 +161,7 @@ class TwoFactor
         if (! class_exists(U2FServer::class)) {
             $result[] = [
                 'class' => Key::getName(),
-                'dep' => 'samyoul/u2f-php-server',
+                'dep' => 'code-lts/u2f-php-server',
             ];
         }
 
@@ -172,11 +174,13 @@ class TwoFactor
      * @param string $name Backend name
      *
      * @return string
+     * @psalm-return class-string
      */
     public function getBackendClass($name)
     {
         $result = TwoFactorPlugin::class;
         if (in_array($name, $this->available)) {
+            /** @psalm-var class-string $result */
             $result = 'PhpMyAdmin\\Plugins\\TwoFactor\\' . ucfirst($name);
         } elseif (! empty($name)) {
             $result = Invalid::class;
@@ -201,10 +205,8 @@ class TwoFactor
      * Checks authentication, returns true on success
      *
      * @param bool $skipSession Skip session cache
-     *
-     * @return bool
      */
-    public function check($skipSession = false)
+    public function check($skipSession = false): bool
     {
         if ($skipSession) {
             return $this->backend->check();
@@ -214,7 +216,7 @@ class TwoFactor
             $_SESSION['two_factor_check'] = $this->backend->check();
         }
 
-        return $_SESSION['two_factor_check'];
+        return (bool) $_SESSION['two_factor_check'];
     }
 
     /**
@@ -254,10 +256,8 @@ class TwoFactor
      * if configuration fails.
      *
      * @param string $name Backend name
-     *
-     * @return bool
      */
-    public function configure($name)
+    public function configure($name): bool
     {
         $this->config = ['backend' => $name];
         if ($name === '') {

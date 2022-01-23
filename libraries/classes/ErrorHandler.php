@@ -106,10 +106,7 @@ class ErrorHandler
                 break;
             }
 
-            if (
-                (! ($error instanceof Error))
-                || $error->isDisplayed()
-            ) {
+            if ((! ($error instanceof Error)) || $error->isDisplayed()) {
                 continue;
             }
 
@@ -157,16 +154,22 @@ class ErrorHandler
     /**
      * Pops recent errors from the storage
      *
-     * @param int $count Old error count
+     * @param int $count Old error count (amount of errors to splice)
      *
-     * @return Error[]
+     * @return Error[] The non spliced elements (total-$count)
      */
     public function sliceErrors(int $count): array
     {
+        // store the errors before any operation, example number of items: 10
         $errors = $this->getErrors(false);
+
+        // before array_splice $this->errors has 10 elements
+        // cut out $count items out, let's say $count = 9
+        // $errors will now contain 10 - 9 = 1 elements
+        // $this->errors will contain the 9 elements left
         $this->errors = array_splice($errors, 0, $count);
 
-        return array_splice($errors, $count);
+        return $errors;
     }
 
     /**
@@ -250,12 +253,7 @@ class ErrorHandler
         }
 
         // create error object
-        $error = new Error(
-            $errno,
-            $errstr,
-            $errfile,
-            $errline
-        );
+        $error = new Error($errno, $errstr, $errfile, $errline);
         $error->setHideLocation($this->hideLocation);
 
         // do not repeat errors
@@ -295,8 +293,9 @@ class ErrorHandler
      *
      * @param string $errorInfo   error message
      * @param int    $errorNumber error number
+     * @psalm-param 256|512|1024|16384 $errorNumber
      */
-    public function triggerError(string $errorInfo, ?int $errorNumber = null): void
+    public function triggerError(string $errorInfo, int $errorNumber = E_USER_NOTICE): void
     {
         // we could also extract file and line from backtrace
         // and call handleError() directly
@@ -351,7 +350,7 @@ class ErrorHandler
      */
     protected function dispPageStart(?Error $error = null): void
     {
-        Response::getInstance()->disable();
+        ResponseRenderer::getInstance()->disable();
         echo '<html><head><title>';
         if ($error) {
             echo $error->getTitle();
@@ -391,10 +390,7 @@ class ErrorHandler
 
         // if preference is not 'never' and
         // there are 'actual' errors to be reported
-        if (
-            $GLOBALS['cfg']['SendErrorReports'] !== 'never'
-            && $this->countErrors() !=  $this->countUserErrors()
-        ) {
+        if ($GLOBALS['cfg']['SendErrorReports'] !== 'never' && $this->countErrors() != $this->countUserErrors()) {
             // add report button.
             $retval .= '<form method="post" action="' . Url::getFromRoute('/error-report')
                     . '" id="pma_report_errors_form"';
@@ -403,7 +399,7 @@ class ErrorHandler
                 $retval .= ' class="hide"';
             }
 
-            $retval .=  '>';
+            $retval .= '>';
             $retval .= Url::getHiddenFields([
                 'exception_type' => 'php',
                 'send_error_report' => '1',
@@ -545,13 +541,11 @@ class ErrorHandler
      *      also collected by global error handler.
      * This distinguishes between the actual errors
      *      and user errors raised to warn user.
-     *
-     * @return bool true if there are errors to be "prompted", false otherwise
      */
     public function hasErrorsForPrompt(): bool
     {
         return $GLOBALS['cfg']['SendErrorReports'] !== 'never'
-            && $this->countErrors() !=  $this->countUserErrors();
+            && $this->countErrors() != $this->countUserErrors();
     }
 
     /**
@@ -562,17 +556,14 @@ class ErrorHandler
     public function reportErrors(): void
     {
         // if there're no actual errors,
-        if (
-            ! $this->hasErrors()
-            || $this->countErrors() ==  $this->countUserErrors()
-        ) {
+        if (! $this->hasErrors() || $this->countErrors() == $this->countUserErrors()) {
             // then simply return.
             return;
         }
 
         // Delete all the prev_errors in session & store new prev_errors in session
         $this->savePreviousErrors();
-        $response = Response::getInstance();
+        $response = ResponseRenderer::getInstance();
         $jsCode = '';
         if ($GLOBALS['cfg']['SendErrorReports'] === 'always') {
             if ($response->isAjax()) {

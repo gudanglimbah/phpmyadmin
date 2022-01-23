@@ -220,7 +220,7 @@ class Monitor
 
             case 'proc':
                 $result = $this->dbi->query('SHOW PROCESSLIST');
-                $ret['value'] = $this->dbi->numRows($result);
+                $ret['value'] = $result->numRows();
                 break;
 
             case 'cpu':
@@ -271,7 +271,7 @@ class Monitor
      */
     public function getJsonForLogDataTypeSlow(int $start, int $end): array
     {
-        $query  = 'SELECT start_time, user_host, ';
+        $query = 'SELECT start_time, user_host, ';
         $query .= 'Sec_to_Time(Sum(Time_to_Sec(query_time))) as query_time, ';
         $query .= 'Sec_to_Time(Sum(Time_to_Sec(lock_time))) as lock_time, ';
         $query .= 'SUM(rows_sent) AS rows_sent, ';
@@ -282,13 +282,14 @@ class Monitor
         $query .= 'AND start_time < FROM_UNIXTIME(' . $end . ') GROUP BY sql_text';
 
         $result = $this->dbi->tryQuery($query);
+        // TODO: check for false
 
         $return = [
             'rows' => [],
             'sum' => [],
         ];
 
-        while ($row = $this->dbi->fetchAssoc($result)) {
+        while ($row = $result->fetchAssoc()) {
             $type = mb_strtolower(
                 mb_substr(
                     $row['sql_text'],
@@ -330,8 +331,6 @@ class Monitor
         $return['sum']['TOTAL'] = array_sum($return['sum']);
         $return['numRows'] = count($return['rows']);
 
-        $this->dbi->freeResult($result);
-
         return $return;
     }
 
@@ -365,6 +364,7 @@ class Monitor
         $query .= $limitTypes . 'GROUP by argument'; // HAVING count > 1';
 
         $result = $this->dbi->tryQuery($query);
+        // TODO: check for false
 
         $return = [
             'rows' => [],
@@ -374,7 +374,7 @@ class Monitor
         $insertTablesFirst = -1;
         $i = 0;
 
-        while ($row = $this->dbi->fetchAssoc($result)) {
+        while ($row = $result->fetchAssoc()) {
             preg_match('/^(\w+)\s/', $row['argument'], $match);
             $type = mb_strtolower($match[1]);
 
@@ -446,8 +446,6 @@ class Monitor
         $return['sum']['TOTAL'] = array_sum($return['sum']);
         $return['numRows'] = count($return['rows']);
 
-        $this->dbi->freeResult($result);
-
         return $return;
     }
 
@@ -484,9 +482,7 @@ class Monitor
             }
 
             if (! preg_match('/[^a-zA-Z0-9_]+/', $name)) {
-                $this->dbi->query(
-                    'SET GLOBAL ' . $name . ' = ' . $escapedValue
-                );
+                $this->dbi->query('SET GLOBAL ' . $name . ' = ' . $escapedValue);
             }
         }
 
@@ -525,36 +521,27 @@ class Monitor
         }
 
         // Do not cache query
-        $sqlQuery = preg_replace(
-            '/^(\s*SELECT)/i',
-            '\\1 SQL_NO_CACHE',
-            $query
-        );
+        $sqlQuery = preg_replace('/^(\s*SELECT)/i', '\\1 SQL_NO_CACHE', $query);
 
         $this->dbi->tryQuery($sqlQuery);
         $return['affectedRows'] = $cached_affected_rows;
 
         $result = $this->dbi->tryQuery('EXPLAIN ' . $sqlQuery);
-        while ($row = $this->dbi->fetchAssoc($result)) {
-            $return['explain'][] = $row;
+        if ($result !== false) {
+            $return['explain'] = $result->fetchAllAssoc();
         }
 
         // In case an error happened
         $return['error'] = $this->dbi->getError();
 
-        $this->dbi->freeResult($result);
-
         if ($profiling) {
             $return['profiling'] = [];
             $result = $this->dbi->tryQuery(
-                'SELECT seq,state,duration FROM INFORMATION_SCHEMA.PROFILING'
-                . ' WHERE QUERY_ID=1 ORDER BY seq'
+                'SELECT seq,state,duration FROM INFORMATION_SCHEMA.PROFILING WHERE QUERY_ID=1 ORDER BY seq'
             );
-            while ($row = $this->dbi->fetchAssoc($result)) {
-                $return['profiling'][] = $row;
+            if ($result !== false) {
+                $return['profiling'] = $result->fetchAllAssoc();
             }
-
-            $this->dbi->freeResult($result);
         }
 
         return $return;

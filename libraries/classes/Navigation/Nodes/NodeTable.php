@@ -48,9 +48,7 @@ class NodeTable extends NodeDatabaseChild
         $this->secondIcon = $this->addIcon(
             Util::getScriptNameForOption($GLOBALS['cfg']['NavigationTreeDefaultTabTable2'], 'table')
         );
-        $title = (string) Util::getTitleForTarget(
-            $GLOBALS['cfg']['DefaultTabTable']
-        );
+        $title = (string) Util::getTitleForTarget($GLOBALS['cfg']['DefaultTabTable']);
         $this->title = $title;
 
         $this->links = [
@@ -58,11 +56,11 @@ class NodeTable extends NodeDatabaseChild
                 'route' => Util::getUrlForOption($GLOBALS['cfg']['DefaultTabTable'], 'table'),
                 'params' => ['pos' => 0, 'db' => null, 'table' => null],
             ],
-            'icon'  => [
+            'icon' => [
                 'route' => Util::getUrlForOption($GLOBALS['cfg']['NavigationTreeDefaultTabTable'], 'table'),
                 'params' => ['db' => null, 'table' => null],
             ],
-            'second_icon'  => [
+            'second_icon' => [
                 'route' => Util::getUrlForOption($GLOBALS['cfg']['NavigationTreeDefaultTabTable2'], 'table'),
                 'params' => ['db' => null, 'table' => null],
             ],
@@ -104,9 +102,7 @@ class NodeTable extends NodeDatabaseChild
                     $db = Util::backquote($db);
                     $table = Util::backquote($table);
                     $query = 'SHOW COLUMNS FROM ' . $table . ' FROM ' . $db . '';
-                    $retval = (int) $dbi->numRows(
-                        $dbi->tryQuery($query)
-                    );
+                    $retval = (int) $dbi->queryAndGetNumRows($query);
                 }
 
                 break;
@@ -114,9 +110,7 @@ class NodeTable extends NodeDatabaseChild
                 $db = Util::backquote($db);
                 $table = Util::backquote($table);
                 $query = 'SHOW INDEXES FROM ' . $table . ' FROM ' . $db;
-                $retval = (int) $dbi->numRows(
-                    $dbi->tryQuery($query)
-                );
+                $retval = (int) $dbi->queryAndGetNumRows($query);
                 break;
             case 'triggers':
                 if (! $GLOBALS['cfg']['Server']['DisableIS']) {
@@ -133,9 +127,7 @@ class NodeTable extends NodeDatabaseChild
                     $db = Util::backquote($db);
                     $table = $dbi->escapeString($table);
                     $query = 'SHOW TRIGGERS FROM ' . $db . " WHERE `Table` = '" . $table . "'";
-                    $retval = (int) $dbi->numRows(
-                        $dbi->tryQuery($query)
-                    );
+                    $retval = (int) $dbi->queryAndGetNumRows($query);
                 }
 
                 break;
@@ -194,8 +186,8 @@ class NodeTable extends NodeDatabaseChild
                 }
 
                 $count = 0;
-                if ($dbi->dataSeek($handle, $pos)) {
-                    while ($arr = $dbi->fetchArray($handle)) {
+                if ($handle->seek($pos)) {
+                    while ($arr = $handle->fetchAssoc()) {
                         if ($count >= $maxItems) {
                             break;
                         }
@@ -204,7 +196,7 @@ class NodeTable extends NodeDatabaseChild
                             'name' => $arr['Field'],
                             'key' => $arr['Key'],
                             'type' => Util::extractColumnSpec($arr['Type'])['type'],
-                            'default' =>  $arr['Default'],
+                            'default' => $arr['Default'],
                             'nullable' => ($arr['Null'] === 'NO' ? '' : 'nullable'),
                         ];
                         $count++;
@@ -222,7 +214,7 @@ class NodeTable extends NodeDatabaseChild
                 }
 
                 $count = 0;
-                while ($arr = $dbi->fetchArray($handle)) {
+                foreach ($handle as $arr) {
                     if (in_array($arr['Key_name'], $retval)) {
                         continue;
                     }
@@ -261,8 +253,8 @@ class NodeTable extends NodeDatabaseChild
                 }
 
                 $count = 0;
-                if ($dbi->dataSeek($handle, $pos)) {
-                    while ($arr = $dbi->fetchArray($handle)) {
+                if ($handle->seek($pos)) {
+                    while ($arr = $handle->fetchAssoc()) {
                         if ($count >= $maxItems) {
                             break;
                         }

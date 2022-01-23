@@ -163,6 +163,7 @@ class Form
         }
 
         if (! $hasStringKeys) {
+            /** @var array $value */
             $value = array_combine($keys, $value);
         }
 
@@ -177,16 +178,14 @@ class Form
      * @param mixed $value  Value
      * @param mixed $key    Key
      * @param mixed $prefix Prefix
-     *
-     * @return void
      */
-    private function readFormPathsCallback($value, $key, $prefix)
+    private function readFormPathsCallback($value, $key, $prefix): void
     {
         if (is_array($value)) {
             $prefix .= $key . '/';
             array_walk(
                 $value,
-                function ($value, $key, $prefix) {
+                function ($value, $key, $prefix): void {
                     $this->readFormPathsCallback($value, $key, $prefix);
                 },
                 $prefix
@@ -220,16 +219,14 @@ class Form
      * Reads form paths to {@link $fields}
      *
      * @param array $form Form
-     *
-     * @return void
      */
-    protected function readFormPaths(array $form)
+    protected function readFormPaths(array $form): void
     {
         // flatten form fields' paths and save them to $fields
         $this->fields = [];
         array_walk(
             $form,
-            function ($value, $key, $prefix) {
+            function ($value, $key, $prefix): void {
                 $this->readFormPathsCallback($value, $key, $prefix);
             },
             ''
@@ -251,10 +248,8 @@ class Form
 
     /**
      * Reads fields' types to $this->fieldsTypes
-     *
-     * @return void
      */
-    protected function readTypes()
+    protected function readTypes(): void
     {
         $cf = $this->configFile;
         foreach ($this->fields as $name => $path) {
@@ -306,10 +301,8 @@ class Form
      *
      * @param string $formName Form name
      * @param array  $form     Form
-     *
-     * @return void
      */
-    public function loadForm($formName, array $form)
+    public function loadForm($formName, array $form): void
     {
         $this->name = $formName;
         $form = $this->cleanGroupPaths($form);

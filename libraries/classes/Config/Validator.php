@@ -185,10 +185,8 @@ class Validator
                         $result[$key] = [];
                     }
 
-                    $result[$key] = array_merge(
-                        $result[$key],
-                        (array) $errorList
-                    );
+                    $errorList = array_map('PhpMyAdmin\Sanitize::sanitizeMessage', (array) $errorList);
+                    $result[$key] = array_merge($result[$key], $errorList);
                 }
             }
         }
@@ -197,11 +195,7 @@ class Validator
         $newResult = [];
         foreach ($result as $k => $v) {
             $k2 = $keyMap[$k] ?? $k;
-            if (is_array($v)) {
-                $newResult[$k2] = array_map('htmlspecialchars', $v);
-            } else {
-                $newResult[$k2] = htmlspecialchars($v);
-            }
+            $newResult[$k2] = $v;
         }
 
         return empty($newResult) ? true : $newResult;
@@ -237,12 +231,14 @@ class Validator
 
         error_clear_last();
 
+        /** @var string $socket */
         $socket = empty($socket) ? null : $socket;
+        /** @var int $port */
         $port = empty($port) ? null : (int) $port;
 
         mysqli_report(MYSQLI_REPORT_OFF);
 
-        $conn = @mysqli_connect($host, $user, (string) $pass, '', $port, (string) $socket);
+        $conn = @mysqli_connect($host, $user, (string) $pass, '', $port, $socket);
         if (! $conn) {
             $error = __('Could not connect to the database server!');
         } else {
@@ -284,34 +280,21 @@ class Validator
             $error = true;
         }
 
-        if (
-            $values['Servers/1/auth_type'] === 'config'
-            && empty($values['Servers/1/user'])
-        ) {
-            $result['Servers/1/user'] = __(
-                'Empty username while using [kbd]config[/kbd] authentication method!'
-            );
+        if ($values['Servers/1/auth_type'] === 'config' && empty($values['Servers/1/user'])) {
+            $result['Servers/1/user'] = __('Empty username while using [kbd]config[/kbd] authentication method!');
             $error = true;
         }
 
-        if (
-            $values['Servers/1/auth_type'] === 'signon'
-            && empty($values['Servers/1/SignonSession'])
-        ) {
+        if ($values['Servers/1/auth_type'] === 'signon' && empty($values['Servers/1/SignonSession'])) {
             $result['Servers/1/SignonSession'] = __(
-                'Empty signon session name '
-                . 'while using [kbd]signon[/kbd] authentication method!'
+                'Empty signon session name while using [kbd]signon[/kbd] authentication method!'
             );
             $error = true;
         }
 
-        if (
-            $values['Servers/1/auth_type'] === 'signon'
-            && empty($values['Servers/1/SignonURL'])
-        ) {
+        if ($values['Servers/1/auth_type'] === 'signon' && empty($values['Servers/1/SignonURL'])) {
             $result['Servers/1/SignonURL'] = __(
-                'Empty signon URL while using [kbd]signon[/kbd] authentication '
-                . 'method!'
+                'Empty signon URL while using [kbd]signon[/kbd] authentication method!'
             );
             $error = true;
         }
@@ -365,16 +348,14 @@ class Validator
         $result = [];
         if (empty($values['Servers/1/controluser'])) {
             $result['Servers/1/controluser'] = __(
-                'Empty phpMyAdmin control user while using phpMyAdmin configuration '
-                . 'storage!'
+                'Empty phpMyAdmin control user while using phpMyAdmin configuration storage!'
             );
             $error = true;
         }
 
         if (empty($values['Servers/1/controlpass'])) {
             $result['Servers/1/controlpass'] = __(
-                'Empty phpMyAdmin control user password while using phpMyAdmin '
-                . 'configuration storage!'
+                'Empty phpMyAdmin control user password while using phpMyAdmin configuration storage!'
             );
             $error = true;
         }

@@ -1,7 +1,4 @@
 <?php
-/**
- * Selenium TestCase for change password related tests
- */
 
 declare(strict_types=1);
 
@@ -13,9 +10,7 @@ use function array_push;
 use function trim;
 
 /**
- * PrivilegesTest class
- *
- * @group      selenium
+ * @coversNothing
  */
 class ChangePasswordTest extends TestBase
 {
@@ -52,21 +47,21 @@ class ChangePasswordTest extends TestBase
             $ele = $this->waitForElement('name', 'pma_pw');
             $this->assertEquals('', $ele->getAttribute('value'));
         } catch (AssertionFailedError $e) {
-            array_push($this->verificationErrors, $e->toString());
+            array_push($this->verificationErrors, $e->getMessage());
         }
 
         try {
             $ele = $this->waitForElement('name', 'pma_pw2');
             $this->assertEquals('', $ele->getAttribute('value'));
         } catch (AssertionFailedError $e) {
-            array_push($this->verificationErrors, $e->toString());
+            array_push($this->verificationErrors, $e->getMessage());
         }
 
         try {
             $ele = $this->waitForElement('name', 'generated_pw');
             $this->assertEquals('', $ele->getAttribute('value'));
         } catch (AssertionFailedError $e) {
-            array_push($this->verificationErrors, $e->toString());
+            array_push($this->verificationErrors, $e->getMessage());
         }
 
         $this->byId('button_generate_password')->click();
@@ -85,7 +80,7 @@ class ChangePasswordTest extends TestBase
             $this->byId('nopass_1')->click();
         }
 
-        $this->byXpath("//button[contains(., 'Go')]")->click();
+        $this->byCssSelector('#change_password_dialog + div button')->click();
         $ele = $this->waitForElement('cssSelector', '.alert-success');
         $this->assertEquals(
             'The profile has been updated.',

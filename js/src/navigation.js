@@ -165,7 +165,7 @@ Navigation.loadChildNodes = function (isNode, $expandElem, callback) {
         };
     }
 
-    $.get('index.php?route=/navigation&ajax_request=1', params, function (data) {
+    $.post('index.php?route=/navigation&ajax_request=1', params, function (data) {
         if (typeof data !== 'undefined' && data.success === true) {
             $destination.find('div.list_container').remove(); // FIXME: Hack, there shouldn't be a list container there
             if (isNode) {
@@ -411,7 +411,7 @@ $(function () {
     /**
      * Bind all "fast filter" events
      */
-    $(document).on('click', '#pma_navigation_tree li.fast_filter span', Navigation.FastFilter.events.clear);
+    $(document).on('click', '#pma_navigation_tree li.fast_filter button.searchClauseClear', Navigation.FastFilter.events.clear);
     $(document).on('focus', '#pma_navigation_tree li.fast_filter input.searchClause', Navigation.FastFilter.events.focus);
     $(document).on('blur', '#pma_navigation_tree li.fast_filter input.searchClause', Navigation.FastFilter.events.blur);
     $(document).on('keyup', '#pma_navigation_tree li.fast_filter input.searchClause', Navigation.FastFilter.events.keyup);
@@ -467,7 +467,7 @@ $(function () {
     /** New view */
     $(document).on('click', 'li.new_view a.ajax', function (event) {
         event.preventDefault();
-        Functions.createViewDialog($(this));
+        Functions.createViewModal($(this));
     });
 
     /** Hide navigation tree item */
@@ -500,23 +500,8 @@ $(function () {
         $.post($(this).attr('href'), params, function (data) {
             if (typeof data !== 'undefined' && data.success === true) {
                 Functions.ajaxRemoveMessage($msg);
-                var buttonOptions = {};
-                buttonOptions[Messages.strClose] = function () {
-                    $(this).dialog('close');
-                };
-                $('<div></div>')
-                    .attr('id', 'unhideNavItemDialog')
-                    .append(data.message)
-                    .dialog({
-                        width: 400,
-                        minWidth: 200,
-                        modal: true,
-                        buttons: buttonOptions,
-                        title: Messages.strUnhideNavItem,
-                        close: function () {
-                            $(this).remove();
-                        }
-                    });
+                $('#unhideNavItemModal').modal('show');
+                $('#unhideNavItemModal').find('.modal-body').first().html(data.message);
             } else {
                 Functions.ajaxShowMessage(data.error);
             }

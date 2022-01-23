@@ -10,7 +10,6 @@ use PhpMyAdmin\Twig\Extensions\Node\TransNode;
 use PhpMyAdmin\Twig\FlashMessagesExtension;
 use PhpMyAdmin\Twig\I18nExtension;
 use PhpMyAdmin\Twig\MessageExtension;
-use PhpMyAdmin\Twig\PluginsExtension;
 use PhpMyAdmin\Twig\RelationExtension;
 use PhpMyAdmin\Twig\SanitizeExtension;
 use PhpMyAdmin\Twig\TableExtension;
@@ -80,7 +79,7 @@ class Template
 
         $twig->addRuntimeLoader(new ContainerRuntimeLoader($containerBuilder));
 
-        if (is_array($cfg) && $cfg['environment'] === 'development') {
+        if (is_array($cfg) && ($cfg['environment'] ?? '') === 'development') {
             $twig->enableDebug();
             $twig->addExtension(new DebugExtension());
             // This will enable debug for the extension to print lines
@@ -98,7 +97,6 @@ class Template
         $twig->addExtension(new FlashMessagesExtension());
         $twig->addExtension(new I18nExtension());
         $twig->addExtension(new MessageExtension());
-        $twig->addExtension(new PluginsExtension());
         $twig->addExtension(new RelationExtension());
         $twig->addExtension(new SanitizeExtension());
         $twig->addExtension(new TableExtension());

@@ -20,9 +20,7 @@ use function sqrt;
  * master table's master field to foreign table's foreign key
  * in SVG XML document.
  *
- * @see     PMA_SVG::printElementLine
- *
- * @name    Relation_Stats_Svg
+ * @see     Svg::printElementLine
  */
 class RelationStatsSvg extends RelationStats
 {
@@ -41,13 +39,7 @@ class RelationStatsSvg extends RelationStats
         $foreign_field
     ) {
         $this->wTick = 10;
-        parent::__construct(
-            $diagram,
-            $master_table,
-            $master_field,
-            $foreign_table,
-            $foreign_field
-        );
+        parent::__construct($diagram, $master_table, $master_field, $foreign_table, $foreign_field);
     }
 
     /**
@@ -56,12 +48,8 @@ class RelationStatsSvg extends RelationStats
      * @see    PMA_SVG
      *
      * @param bool $showColor Whether to use one color per relation or not
-     *
-     * @return void
-     *
-     * @access public
      */
-    public function relationDraw($showColor)
+    public function relationDraw($showColor): void
     {
         if ($showColor) {
             $listOfColors = [

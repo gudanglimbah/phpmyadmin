@@ -22,9 +22,9 @@ use function sprintf;
  * This class preserves the table co-ordinates,fields
  * and helps in drawing/generating the Tables in SVG XML document.
  *
- * @see     PMA_SVG
+ * @see     Svg
  *
- * @name    TableStatsSvg
+ * @property Svg $diagram
  */
 class TableStatsSvg extends TableStats
 {
@@ -39,7 +39,7 @@ class TableStatsSvg extends TableStats
      * @see TableStatsSvg::setWidthTable
      * @see TableStatsSvg::setHeightTable
      *
-     * @param object $diagram         The current SVG image document
+     * @param Svg    $diagram         The current SVG image document
      * @param string $db              The database name
      * @param string $tableName       The table name
      * @param string $font            Font face
@@ -62,15 +62,7 @@ class TableStatsSvg extends TableStats
         $tableDimension = false,
         $offline = false
     ) {
-        parent::__construct(
-            $diagram,
-            $db,
-            $pageNumber,
-            $tableName,
-            $showKeys,
-            $tableDimension,
-            $offline
-        );
+        parent::__construct($diagram, $db, $pageNumber, $tableName, $showKeys, $tableDimension, $offline);
 
         // height and width
         $this->setHeightTable($fontSize);
@@ -103,8 +95,6 @@ class TableStatsSvg extends TableStats
      *
      * @param string $font     The font size
      * @param int    $fontSize The font size
-     *
-     * @access private
      */
     private function setWidthTable($font, $fontSize): void
     {
@@ -121,10 +111,7 @@ class TableStatsSvg extends TableStats
          * it is unknown what value must be added, because
          * table title is affected by the table width value
          */
-        while (
-            $this->width
-            < $this->font->getStringWidth($this->getTitle(), $font, $fontSize)
-        ) {
+        while ($this->width < $this->font->getStringWidth($this->getTitle(), $font, $fontSize)) {
             $this->width += 7;
         }
     }
@@ -146,8 +133,6 @@ class TableStatsSvg extends TableStats
      * @see Svg::printElement
      *
      * @param bool $showColor Whether to display color
-     *
-     * @access public
      */
     public function tableDraw($showColor): void
     {

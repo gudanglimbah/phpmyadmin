@@ -33,20 +33,18 @@ use const PHP_VERSION;
  */
 class ExportLatex extends ExportPlugin
 {
-    public function __construct()
+    /**
+     * @psalm-return non-empty-lowercase-string
+     */
+    public function getName(): string
     {
-        parent::__construct();
-        // initialize the specific export sql variables
-        $this->initSpecificVariables();
-        $this->setProperties();
+        return 'latex';
     }
 
     /**
-     * Initialize the local variables that are used for export Latex
-     *
-     * @return void
+     * Initialize the local variables that are used for export Latex.
      */
-    protected function initSpecificVariables()
+    protected function init(): void
     {
         /* Messages used in default captions */
         $GLOBALS['strLatexContent'] = __('Content of table @TABLE@');
@@ -54,19 +52,11 @@ class ExportLatex extends ExportPlugin
         $GLOBALS['strLatexStructure'] = __('Structure of table @TABLE@');
     }
 
-    /**
-     * Sets the export Latex properties
-     *
-     * @return void
-     */
-    protected function setProperties()
+    protected function setProperties(): ExportPluginProperties
     {
         global $plugin_param;
         $hide_structure = false;
-        if (
-            $plugin_param['export_type'] === 'table'
-            && ! $plugin_param['single_table']
-        ) {
+        if ($plugin_param['export_type'] === 'table' && ! $plugin_param['single_table']) {
             $hide_structure = true;
         }
 
@@ -79,9 +69,7 @@ class ExportLatex extends ExportPlugin
         // create the root group that will be the options field for
         // $exportPluginProperties
         // this will be shown as "Format specific options"
-        $exportSpecificOptions = new OptionsPropertyRootGroup(
-            'Format Specific Options'
-        );
+        $exportSpecificOptions = new OptionsPropertyRootGroup('Format Specific Options');
 
         // general options main group
         $generalOptions = new OptionsPropertyMainGroup('general_opts');
@@ -103,8 +91,8 @@ class ExportLatex extends ExportPlugin
         $leaf = new RadioPropertyItem('structure_or_data');
         $leaf->setValues(
             [
-                'structure'          => __('structure'),
-                'data'               => __('data'),
+                'structure' => __('structure'),
+                'data' => __('data'),
                 'structure_and_data' => __('structure and data'),
             ]
         );
@@ -138,7 +126,8 @@ class ExportLatex extends ExportPlugin
             );
             $leaf->setDoc('faq6-27');
             $structureOptions->addProperty($leaf);
-            if (! empty($GLOBALS['cfgRelation']['relation'])) {
+            $relationParameters = $this->relation->getRelationParameters();
+            if ($relationParameters->relationFeature !== null) {
                 $leaf = new BoolPropertyItem(
                     'relation',
                     __('Display foreign key relationships')
@@ -151,7 +140,7 @@ class ExportLatex extends ExportPlugin
                 __('Display comments')
             );
             $structureOptions->addProperty($leaf);
-            if (! empty($GLOBALS['cfgRelation']['mimework'])) {
+            if ($relationParameters->browserTransformationFeature !== null) {
                 $leaf = new BoolPropertyItem(
                     'mime',
                     __('Display media types')
@@ -203,15 +192,14 @@ class ExportLatex extends ExportPlugin
 
         // set the options for the export plugin property item
         $exportPluginProperties->setOptions($exportSpecificOptions);
-        $this->properties = $exportPluginProperties;
+
+        return $exportPluginProperties;
     }
 
     /**
      * Outputs export header
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportHeader()
+    public function exportHeader(): bool
     {
         global $crlf, $cfg, $dbi;
 
@@ -235,10 +223,8 @@ class ExportLatex extends ExportPlugin
 
     /**
      * Outputs export footer
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportFooter()
+    public function exportFooter(): bool
     {
         return true;
     }
@@ -248,10 +234,8 @@ class ExportLatex extends ExportPlugin
      *
      * @param string $db      Database name
      * @param string $dbAlias Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBHeader($db, $dbAlias = '')
+    public function exportDBHeader($db, $dbAlias = ''): bool
     {
         if (empty($dbAlias)) {
             $dbAlias = $db;
@@ -269,10 +253,8 @@ class ExportLatex extends ExportPlugin
      * Outputs database footer
      *
      * @param string $db Database name
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBFooter($db)
+    public function exportDBFooter($db): bool
     {
         return true;
     }
@@ -283,10 +265,8 @@ class ExportLatex extends ExportPlugin
      * @param string $db         Database name
      * @param string $exportType 'server', 'database', 'table'
      * @param string $dbAlias    Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBCreate($db, $exportType, $dbAlias = '')
+    public function exportDBCreate($db, $exportType, $dbAlias = ''): bool
     {
         return true;
     }
@@ -300,8 +280,6 @@ class ExportLatex extends ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery SQL query for obtaining data
      * @param array  $aliases  Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     public function exportData(
         $db,
@@ -310,24 +288,20 @@ class ExportLatex extends ExportPlugin
         $errorUrl,
         $sqlQuery,
         array $aliases = []
-    ) {
+    ): bool {
         global $dbi;
 
         $db_alias = $db;
         $table_alias = $table;
         $this->initAlias($aliases, $db_alias, $table_alias);
 
-        $result = $dbi->tryQuery(
-            $sqlQuery,
-            DatabaseInterface::CONNECT_USER,
-            DatabaseInterface::QUERY_UNBUFFERED
-        );
+        $result = $dbi->tryQuery($sqlQuery, DatabaseInterface::CONNECT_USER, DatabaseInterface::QUERY_UNBUFFERED);
 
-        $columns_cnt = $dbi->numFields($result);
+        $columns_cnt = $result->numFields();
         $columns = [];
         $columns_alias = [];
-        for ($i = 0; $i < $columns_cnt; $i++) {
-            $columns[$i] = $col_as = $dbi->fieldName($result, $i);
+        foreach ($result->getFieldNames() as $i => $col_as) {
+            $columns[$i] = $col_as;
             if (! empty($aliases[$db]['tables'][$table]['columns'][$col_as])) {
                 $col_as = $aliases[$db]['tables'][$table]['columns'][$col_as];
             }
@@ -419,14 +393,11 @@ class ExportLatex extends ExportPlugin
         }
 
         // print the whole table
-        while ($record = $dbi->fetchAssoc($result)) {
+        while ($record = $result->fetchAssoc()) {
             $buffer = '';
             // print each row
             for ($i = 0; $i < $columns_cnt; $i++) {
-                if (
-                    $record[$columns[$i]] !== null
-                    && isset($record[$columns[$i]])
-                ) {
+                if ($record[$columns[$i]] !== null && isset($record[$columns[$i]])) {
                     $column_value = self::texEscape(
                         stripslashes($record[$columns[$i]])
                     );
@@ -449,13 +420,8 @@ class ExportLatex extends ExportPlugin
         }
 
         $buffer = ' \\end{longtable}' . $crlf;
-        if (! $this->export->outputHandler($buffer)) {
-            return false;
-        }
 
-        $dbi->freeResult($result);
-
-        return true;
+        return $this->export->outputHandler($buffer);
     }
 
     /**
@@ -464,8 +430,6 @@ class ExportLatex extends ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery the rawquery to output
      * @param string $crlf     the seperator for a file
-     *
-     * @return bool if succeeded
      */
     public function exportRawQuery(string $errorUrl, string $sqlQuery, string $crlf): bool
     {
@@ -492,8 +456,6 @@ class ExportLatex extends ExportPlugin
      * @param bool   $do_mime     whether to include mime comments
      * @param bool   $dates       whether to include creation/update/check dates
      * @param array  $aliases     Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     public function exportStructure(
         $db,
@@ -507,14 +469,14 @@ class ExportLatex extends ExportPlugin
         $do_mime = false,
         $dates = false,
         array $aliases = []
-    ) {
+    ): bool {
         global $dbi;
 
         $db_alias = $db;
         $table_alias = $table;
         $this->initAlias($aliases, $db_alias, $table_alias);
 
-        global $cfgRelation;
+        $relationParameters = $this->relation->getRelationParameters();
 
         /* We do not export triggers */
         if ($exportMode === 'triggers') {
@@ -541,7 +503,7 @@ class ExportLatex extends ExportPlugin
 
         // Check if we can use Relations
         [$res_rel, $have_rel] = $this->relation->getRelationsAndStatus(
-            $do_relation && ! empty($cfgRelation['relation']),
+            $do_relation && $relationParameters->relationFeature !== null,
             $db,
             $table
         );
@@ -563,7 +525,7 @@ class ExportLatex extends ExportPlugin
             $alignment .= 'l|';
         }
 
-        if ($do_mime && $cfgRelation['mimework']) {
+        if ($do_mime && $relationParameters->browserTransformationFeature !== null) {
             $alignment .= 'l|';
         }
 
@@ -583,7 +545,7 @@ class ExportLatex extends ExportPlugin
             $comments = $this->relation->getComments($db, $table);
         }
 
-        if ($do_mime && $cfgRelation['mimework']) {
+        if ($do_mime && $relationParameters->browserTransformationFeature !== null) {
             $header .= ' & \\multicolumn{1}{|c|}{\\textbf{MIME}}';
             $mime_map = $this->transformations->getMime($db, $table, true);
         }
@@ -665,29 +627,20 @@ class ExportLatex extends ExportPlugin
 
             if ($do_relation && $have_rel) {
                 $local_buffer .= "\000";
-                $local_buffer .= $this->getRelationString(
-                    $res_rel,
-                    $field_name,
-                    $db,
-                    $aliases
-                );
+                $local_buffer .= $this->getRelationString($res_rel, $field_name, $db, $aliases);
             }
 
-            if ($do_comments && $cfgRelation['commwork']) {
+            if ($do_comments && $relationParameters->columnCommentsFeature !== null) {
                 $local_buffer .= "\000";
                 if (isset($comments[$field_name])) {
                     $local_buffer .= $comments[$field_name];
                 }
             }
 
-            if ($do_mime && $cfgRelation['mimework']) {
+            if ($do_mime && $relationParameters->browserTransformationFeature !== null) {
                 $local_buffer .= "\000";
                 if (isset($mime_map[$field_name])) {
-                    $local_buffer .= str_replace(
-                        '_',
-                        '/',
-                        $mime_map[$field_name]['mimetype']
-                    );
+                    $local_buffer .= str_replace('_', '/', $mime_map[$field_name]['mimetype']);
                 }
             }
 

@@ -7,11 +7,11 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin\Database;
 
+use PhpMyAdmin\ConfigStorage\Relation;
+use PhpMyAdmin\ConfigStorage\RelationCleanup;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Operations;
 use PhpMyAdmin\ParseAnalyze;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\RelationCleanup;
 use PhpMyAdmin\Sql;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Transformations;
@@ -28,7 +28,6 @@ class MultiTableQuery
     /**
      * DatabaseInterface instance
      *
-     * @access private
      * @var DatabaseInterface
      */
     private $dbi;
@@ -36,7 +35,6 @@ class MultiTableQuery
     /**
      * Database name
      *
-     * @access private
      * @var string
      */
     private $db;
@@ -44,7 +42,6 @@ class MultiTableQuery
     /**
      * Default number of columns
      *
-     * @access private
      * @var int
      */
     private $defaultNoOfColumns;
@@ -52,7 +49,6 @@ class MultiTableQuery
     /**
      * Table names
      *
-     * @access private
      * @var array
      */
     private $tables;

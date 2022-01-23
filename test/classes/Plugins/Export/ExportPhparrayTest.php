@@ -32,7 +32,6 @@ class ExportPhparrayTest extends AbstractTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        parent::loadDefaultConfig();
         $GLOBALS['server'] = 0;
         $GLOBALS['output_kanji_conversion'] = false;
         $GLOBALS['output_charset_conversion'] = false;
@@ -66,10 +65,7 @@ class ExportPhparrayTest extends AbstractTestCase
         $attrProperties->setAccessible(true);
         $properties = $attrProperties->getValue($this->object);
 
-        $this->assertInstanceOf(
-            ExportPluginProperties::class,
-            $properties
-        );
+        $this->assertInstanceOf(ExportPluginProperties::class, $properties);
 
         $this->assertEquals(
             'PHP array',
@@ -93,10 +89,7 @@ class ExportPhparrayTest extends AbstractTestCase
 
         $options = $properties->getOptions();
 
-        $this->assertInstanceOf(
-            OptionsPropertyRootGroup::class,
-            $options
-        );
+        $this->assertInstanceOf(OptionsPropertyRootGroup::class, $options);
 
         $this->assertEquals(
             'Format Specific Options',
@@ -106,10 +99,7 @@ class ExportPhparrayTest extends AbstractTestCase
         $generalOptionsArray = $options->getProperties();
         $generalOptions = $generalOptionsArray[0];
 
-        $this->assertInstanceOf(
-            OptionsPropertyMainGroup::class,
-            $generalOptions
-        );
+        $this->assertInstanceOf(OptionsPropertyMainGroup::class, $generalOptions);
 
         $this->assertEquals(
             'general_opts',
@@ -120,10 +110,7 @@ class ExportPhparrayTest extends AbstractTestCase
 
         $property = array_shift($generalProperties);
 
-        $this->assertInstanceOf(
-            HiddenPropertyItem::class,
-            $property
-        );
+        $this->assertInstanceOf(HiddenPropertyItem::class, $property);
     }
 
     public function testExportHeader(): void
@@ -138,10 +125,7 @@ class ExportPhparrayTest extends AbstractTestCase
 
         $this->assertIsString($result);
 
-        $this->assertStringContainsString(
-            '<?php ',
-            $result
-        );
+        $this->assertStringContainsString('<?php ', $result);
     }
 
     public function testExportFooter(): void
@@ -163,10 +147,7 @@ class ExportPhparrayTest extends AbstractTestCase
 
         $this->assertIsString($result);
 
-        $this->assertStringContainsString(
-            "/**\n * Database `db`\n */",
-            $result
-        );
+        $this->assertStringContainsString("/**\n * Database `db`\n */", $result);
     }
 
     public function testExportDBFooter(): void

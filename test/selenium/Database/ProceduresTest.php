@@ -1,7 +1,4 @@
 <?php
-/**
- * Selenium TestCase for table related tests
- */
 
 declare(strict_types=1);
 
@@ -13,9 +10,7 @@ use function sleep;
 use function str_replace;
 
 /**
- * ProceduresTest class
- *
- * @group      selenium
+ * @coversNothing
  */
 class ProceduresTest extends TestBase
 {
@@ -91,9 +86,7 @@ class ProceduresTest extends TestBase
     protected function tearDown(): void
     {
         if ($this->originalSqlMode !== '') {
-            $this->dbQuery(
-                "SET GLOBAL sql_mode = '" . $this->originalSqlMode . "';"
-            );
+            $this->dbQuery("SET GLOBAL sql_mode = '" . $this->originalSqlMode . "';");
             $this->assertEquals(
                 $this->originalSqlMode,
                 $this->getSqlMode()
@@ -160,8 +153,7 @@ class ProceduresTest extends TestBase
 
         $this->waitForElement(
             'xpath',
-            "//div[@class='alert alert-success' and contains(., "
-            . "'Routine `test_procedure` has been created')]"
+            '//div[@class=\'alert alert-success\' and contains(., \'Routine `test_procedure` has been created\')]'
         );
 
         $this->dbQuery(
@@ -186,10 +178,7 @@ class ProceduresTest extends TestBase
         $this->waitForElement('partialLinkText', 'Routines')->click();
         $this->waitAjax();
 
-        $this->waitForElement(
-            'id',
-            'checkAllCheckbox'
-        );
+        $this->waitForElement('id', 'checkAllCheckbox');
 
         $this->byPartialLinkText('Edit')->click();
         $this->waitForElement('className', 'rte_form');
@@ -200,8 +189,7 @@ class ProceduresTest extends TestBase
 
         $this->waitForElement(
             'xpath',
-            "//div[@class='alert alert-success' and contains(., "
-            . "'Routine `test_procedure` has been modified')]"
+            '//div[@class=\'alert alert-success\' and contains(., \'Routine `test_procedure` has been modified\')]'
         );
 
         $this->executeProcedure('test_procedure', 14);
@@ -218,16 +206,10 @@ class ProceduresTest extends TestBase
         $this->waitForElement('partialLinkText', 'Routines')->click();
         $this->waitAjax();
 
-        $this->waitForElement(
-            'id',
-            'checkAllCheckbox'
-        );
+        $this->waitForElement('id', 'checkAllCheckbox');
 
         $this->byPartialLinkText('Drop')->click();
-        $this->waitForElement(
-            'cssSelector',
-            'button.submitOK'
-        )->click();
+        $this->waitForElement('cssSelector', 'button.submitOK')->click();
 
         $this->waitAjaxMessage();
 
@@ -253,10 +235,7 @@ class ProceduresTest extends TestBase
         $this->byCssSelector('div.ui-dialog-buttonset button:nth-child(1)')->click();
 
         $this->waitAjax();
-        $this->waitForElement(
-            'cssSelector',
-            'span#PMA_slidingMessage table tbody'
-        );
+        $this->waitForElement('cssSelector', 'span#PMA_slidingMessage table tbody');
         $this->waitUntilElementIsVisible('cssSelector', 'span#PMA_slidingMessage', 30);
         sleep(2);// Give more chances to the JS effect to finish
         $head = $this->byCssSelector('span#PMA_slidingMessage table tbody')->getText();

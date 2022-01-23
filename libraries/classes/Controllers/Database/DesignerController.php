@@ -6,7 +6,7 @@ namespace PhpMyAdmin\Controllers\Database;
 
 use PhpMyAdmin\Database\Designer;
 use PhpMyAdmin\Database\Designer\Common as DesignerCommon;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
@@ -24,14 +24,10 @@ class DesignerController extends AbstractController
     /** @var DesignerCommon */
     private $designerCommon;
 
-    /**
-     * @param Response $response
-     * @param string   $db       Database name
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
-        $db,
+        string $db,
         Designer $databaseDesigner,
         DesignerCommon $designerCommon
     ) {
@@ -40,7 +36,7 @@ class DesignerController extends AbstractController
         $this->designerCommon = $designerCommon;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $script_display_field, $tab_column, $tables_all_keys, $tables_pk_or_unique_keys;
         global $success, $page, $message, $display_page, $selected_page, $tab_pos, $fullTableNames, $script_tables;
@@ -55,10 +51,7 @@ class DesignerController extends AbstractController
             } elseif ($_POST['dialog'] === 'save_as') {
                 $html = $this->databaseDesigner->getHtmlForPageSaveAs($_POST['db']);
             } elseif ($_POST['dialog'] === 'export') {
-                $html = $this->databaseDesigner->getHtmlForSchemaExport(
-                    $_POST['db'],
-                    $_POST['selected_page']
-                );
+                $html = $this->databaseDesigner->getHtmlForSchemaExport($_POST['db'], $_POST['selected_page']);
             } elseif ($_POST['dialog'] === 'add_table') {
                 // Pass the db and table to the getTablesInfo so we only have the table we asked for
                 $script_display_field = $this->designerCommon->getTablesInfo($_POST['db'], $_POST['table']);
@@ -116,11 +109,7 @@ class DesignerController extends AbstractController
                 [
                     $success,
                     $message,
-                ] = $this->designerCommon->saveDisplayField(
-                    $_POST['db'],
-                    $_POST['table'],
-                    $_POST['field']
-                );
+                ] = $this->designerCommon->saveDisplayField($_POST['db'], $_POST['table'], $_POST['field']);
                 $this->response->setRequestStatus($success);
                 $this->response->addJSON('message', $message);
             } elseif ($_POST['operation'] === 'addNewRelation') {

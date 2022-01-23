@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Controllers\Table;
 
 use PhpMyAdmin\Config\PageSettings;
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\DbTableExists;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\InsertEdit;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 
@@ -17,8 +17,9 @@ use function __;
 use function array_fill;
 use function count;
 use function is_array;
-use function mb_strpos;
+use function str_contains;
 use function strlen;
+use function strpos;
 
 /**
  * Displays form for editing and inserting new table rows.
@@ -31,16 +32,11 @@ class ChangeController extends AbstractController
     /** @var Relation */
     private $relation;
 
-    /**
-     * @param Response $response
-     * @param string   $db       Database name.
-     * @param string   $table    Table name.
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
-        $db,
-        $table,
+        string $db,
+        string $table,
         InsertEdit $insertEdit,
         Relation $relation
     ) {
@@ -49,9 +45,9 @@ class ChangeController extends AbstractController
         $this->relation = $relation;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
-        global $cfg, $is_upload, $db, $table, $text_dir, $disp_message, $urlParams;
+        global $cfg, $db, $table, $text_dir, $disp_message, $urlParams;
         global $errorUrl, $where_clause, $unsaved_values, $insert_mode, $where_clause_array, $where_clauses;
         global $result, $rows, $found_unique_key, $after_insert, $comments_map, $table_columns;
         global $chg_evt_handler, $timestamp_seen, $columns_cnt, $tabindex;
@@ -76,11 +72,7 @@ class ChangeController extends AbstractController
             $rows,
             $found_unique_key,
             $after_insert,
-        ] = $this->insertEdit->determineInsertOrEdit(
-            $where_clause ?? null,
-            $db,
-            $table
-        );
+        ] = $this->insertEdit->determineInsertOrEdit($where_clause ?? null, $db, $table);
         // Increase number of rows if unsaved rows are more
         if (! empty($unsaved_values) && count($rows) < count($unsaved_values)) {
             $rows = array_fill(0, count($unsaved_values), false);
@@ -99,12 +91,20 @@ class ChangeController extends AbstractController
             }
         }
 
-        $_url_params = $this->insertEdit->getUrlParameters($db, $table);
+        $urlParams = [
+            'db' => $db,
+            'sql_query' => $_POST['sql_query'] ?? '',
+        ];
+
+        if (strpos($GLOBALS['goto'] ?? '', 'index.php?route=/table') === 0) {
+            $urlParams['table'] = $table;
+        }
+
         $errorUrl = $GLOBALS['goto'] . Url::getCommon(
-            $_url_params,
-            mb_strpos($GLOBALS['goto'], '?') === false ? '?' : '&'
+            $urlParams,
+            ! str_contains($GLOBALS['goto'], '?') ? '?' : '&'
         );
-        unset($_url_params);
+        unset($urlParams);
 
         $comments_map = $this->insertEdit->getCommentsMap($db, $table);
 
@@ -149,40 +149,27 @@ class ChangeController extends AbstractController
          */
         // autocomplete feature of IE kills the "onchange" event handler and it
         //        must be replaced by the "onpropertychange" one in this case
-        $chg_evt_handler =  'onchange';
+        $chg_evt_handler = 'onchange';
         // Had to put the URI because when hosted on an https server,
         // some browsers send wrongly this form to the http server.
 
         $html_output = '';
         // Set if we passed the first timestamp field
         $timestamp_seen = false;
-        $columns_cnt     = count($table_columns);
+        $columns_cnt = count($table_columns);
 
-        $tabindex              = 0;
-        $tabindex_for_value    = 0;
-        $o_rows                = 0;
+        $tabindex = 0;
+        $tabindex_for_value = 0;
+        $o_rows = 0;
         $biggest_max_file_size = 0;
 
         $urlParams['db'] = $db;
         $urlParams['table'] = $table;
-        $urlParams = $this->insertEdit->urlParamsInEditMode(
-            $urlParams,
-            $where_clause_array
-        );
+        $urlParams = $this->insertEdit->urlParamsInEditMode($urlParams, $where_clause_array);
 
         $has_blob_field = false;
         foreach ($table_columns as $column) {
-            if (
-                $this->insertEdit->isColumn(
-                    $column,
-                    [
-                        'blob',
-                        'tinyblob',
-                        'mediumblob',
-                        'longblob',
-                    ]
-                )
-            ) {
+            if ($this->insertEdit->isColumn($column, ['blob', 'tinyblob', 'mediumblob', 'longblob'])) {
                 $has_blob_field = true;
                 break;
             }
@@ -190,7 +177,8 @@ class ChangeController extends AbstractController
 
         //Insert/Edit form
         //If table has blob fields we have to disable ajax.
-        $html_output .= $this->insertEdit->getHtmlForInsertEditFormHeader($has_blob_field, $is_upload);
+        $isUpload = $GLOBALS['config']->get('enable_upload');
+        $html_output .= $this->insertEdit->getHtmlForInsertEditFormHeader($has_blob_field, $isUpload);
 
         $html_output .= Url::getHiddenInputs($_form_params);
 
@@ -245,7 +233,7 @@ class ChangeController extends AbstractController
                 $o_rows,
                 $tabindex,
                 $columns_cnt,
-                $is_upload,
+                $isUpload,
                 $foreigners,
                 $tabindex_for_value,
                 $table,
@@ -285,41 +273,9 @@ class ChangeController extends AbstractController
 
         if ($insert_mode) {
             //Continue insertion form
-            $html_output .= $this->insertEdit->getContinueInsertionForm(
-                $table,
-                $db,
-                $where_clause_array,
-                $errorUrl
-            );
+            $html_output .= $this->insertEdit->getContinueInsertionForm($table, $db, $where_clause_array, $errorUrl);
         }
 
         $this->response->addHTML($html_output);
-    }
-
-    public function rows(): void
-    {
-        global $active_page, $where_clause;
-
-        if (isset($_POST['goto']) && (! isset($_POST['rows_to_delete']) || ! is_array($_POST['rows_to_delete']))) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No row selected.'));
-
-            return;
-        }
-
-        // As we got the rows to be edited from the
-        // 'rows_to_delete' checkbox, we use the index of it as the
-        // indicating WHERE clause. Then we build the array which is used
-        // for the /table/change script.
-        $where_clause = [];
-        if (isset($_POST['rows_to_delete']) && is_array($_POST['rows_to_delete'])) {
-            foreach ($_POST['rows_to_delete'] as $i => $i_where_clause) {
-                $where_clause[] = $i_where_clause;
-            }
-        }
-
-        $active_page = Url::getFromRoute('/table/change');
-
-        $this->index();
     }
 }

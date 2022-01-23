@@ -203,7 +203,6 @@ AJAX.registerTeardown('sql.js', function () {
     $(document).off('click', 'th.column_heading.marker');
     $(document).off('scroll', window);
     $(document).off('keyup', '.filter_rows');
-    $(document).off('click', '#printView');
     if (codeMirrorEditor) {
         codeMirrorEditor.off('change');
     } else {
@@ -216,6 +215,7 @@ AJAX.registerTeardown('sql.js', function () {
     $('body').off('click', 'form[name="resultsForm"].ajax button[name="submit_mult"], form[name="resultsForm"].ajax input[name="submit_mult"]');
     $(document).off('submit', '.maxRowsForm');
     $(document).off('click', '#view_as');
+    $(document).off('click', '#sqlquery');
 });
 
 /**
@@ -379,11 +379,14 @@ AJAX.registerOnload('sql.js', function () {
         textArea.value += '\n';
         $('.table_results tbody tr').each(function () {
             $(this).find('.data span').each(function () {
-                textArea.value += $(this).text() + '\t';
+                // Extract <em> tag for NULL values before converting to string to not mess up formatting
+                var data = $(this).find('em').length !== 0 ? $(this).find('em')[0] : this;
+                textArea.value += $(data).text() + '\t';
             });
             textArea.value += '\n';
         });
 
+        // eslint-disable-next-line compat/compat
         document.body.appendChild(textArea);
 
         textArea.select();
@@ -394,18 +397,9 @@ AJAX.registerOnload('sql.js', function () {
             alert('Sorry! Unable to copy');
         }
 
+        // eslint-disable-next-line compat/compat
         document.body.removeChild(textArea);
     }); // end of Copy to Clipboard action
-
-    /**
-     * Attach Event Handler for 'Print' link
-     */
-    $(document).on('click', '#printView', function (event) {
-        event.preventDefault();
-
-        // Take to preview mode
-        Functions.printPreview();
-    }); // end of 'Print' action
 
     /**
      * Attach the {@link makegrid} function to a custom event, which will be
@@ -750,12 +744,11 @@ AJAX.registerOnload('sql.js', function () {
         var $msgbox = Functions.ajaxShowMessage();
         $.ajax({
             type: 'POST',
-            url: $form.attr('action'),
+            url: 'index.php?route=/import/simulate-dml',
             data: {
                 'server': CommonParams.get('server'),
                 'db': dbName,
                 'ajax_request': '1',
-                'simulate_dml': '1',
                 'sql_query': query,
                 'sql_delimiter': delimiter
             },
@@ -780,22 +773,11 @@ AJAX.registerOnload('sql.js', function () {
                     }
                     dialogContent += '</div>';
                     var $dialogContent = $(dialogContent);
-                    var buttonOptions = {};
-                    buttonOptions[Messages.strClose] = function () {
-                        $(this).dialog('close');
-                    };
-                    $('<div></div>').append($dialogContent).dialog({
-                        minWidth: 540,
-                        maxHeight: 400,
-                        modal: true,
-                        buttons: buttonOptions,
-                        title: Messages.strSimulateDML,
-                        open: function () {
-                            Functions.highlightSql($(this));
-                        },
-                        close: function () {
-                            $(this).remove();
-                        }
+                    var modal = $('#simulateDmlModal');
+                    modal.modal('show');
+                    modal.find('.modal-body').first().html($dialogContent);
+                    modal.on('shown.bs.modal', function () {
+                        Functions.highlightSql(modal);
                     });
                 } else {
                     Functions.ajaxShowMessage(response.error);
@@ -864,6 +846,12 @@ AJAX.registerOnload('sql.js', function () {
 
     $('#view_as').on('click', function () {
         Functions.selectContent(this, sqlBoxLocked, true);
+    });
+
+    $('#sqlquery').on('click', function () {
+        if ($(this).data('textarea-auto-select') === true) {
+            Functions.selectContent(this, sqlBoxLocked, true);
+        }
     });
 }); // end $()
 
@@ -937,6 +925,9 @@ Sql.browseForeignDialog = function ($thisA) {
             }
             // Set selected value as input value
             $input.val($(this).data('key'));
+            // Unchecks the Ignore checkbox for the current row
+            $input.trigger('change');
+
             $dialog.dialog('close');
         });
         $(formId).on('click', showAllId, function () {

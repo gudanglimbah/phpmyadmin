@@ -5,18 +5,16 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Controllers;
 
 use PhpMyAdmin\Charsets;
-use PhpMyAdmin\Charsets\Charset;
-use PhpMyAdmin\Charsets\Collation;
 use PhpMyAdmin\CheckUserPrivileges;
 use PhpMyAdmin\Config;
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Git;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\LanguageManager;
 use PhpMyAdmin\Message;
 use PhpMyAdmin\RecentFavoriteTable;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Server\Select;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\ThemeManager;
@@ -29,15 +27,15 @@ use function count;
 use function extension_loaded;
 use function file_exists;
 use function ini_get;
+use function mb_strlen;
 use function preg_match;
 use function sprintf;
-use function strlen;
-use function strtotime;
 use function trigger_error;
 
 use const E_USER_NOTICE;
 use const E_USER_WARNING;
 use const PHP_VERSION;
+use const SODIUM_CRYPTO_SECRETBOX_KEYBYTES;
 
 class HomeController extends AbstractController
 {
@@ -50,20 +48,20 @@ class HomeController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param Config            $config
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, $config, ThemeManager $themeManager, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        Config $config,
+        ThemeManager $themeManager,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template);
         $this->config = $config;
         $this->themeManager = $themeManager;
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $cfg, $server, $collation_connection, $message, $show_query, $db, $table, $errorUrl;
 
@@ -120,10 +118,8 @@ class HomeController extends AbstractController
                 $charsets = Charsets::getCharsets($this->dbi, $cfg['Server']['DisableIS']);
                 $collations = Charsets::getCollations($this->dbi, $cfg['Server']['DisableIS']);
                 $charsetsList = [];
-                /** @var Charset $charset */
                 foreach ($charsets as $charset) {
                     $collationsList = [];
-                    /** @var Collation $collation */
                     foreach ($collations[$charset->getName()] as $collation) {
                         $collationsList[] = [
                             'name' => $collation->getName(),
@@ -194,11 +190,8 @@ class HomeController extends AbstractController
 
         $relation = new Relation($this->dbi);
         if ($server > 0) {
-            $cfgRelation = $relation->getRelationsParam();
-            if (
-                ! $cfgRelation['allworks']
-                && $cfg['PmaNoRelation_DisableWarning'] == false
-            ) {
+            $relationParameters = $relation->getRelationParameters();
+            if (! $relationParameters->hasAllFeatures() && $cfg['PmaNoRelation_DisableWarning'] == false) {
                 $messageText = __(
                     'The phpMyAdmin configuration storage is not completely '
                     . 'configured, some extended features have been deactivated. '
@@ -206,10 +199,7 @@ class HomeController extends AbstractController
                 );
                 if ($cfg['ZeroConf'] == true) {
                     $messageText .= '<br>' .
-                        __(
-                            'Or alternately go to \'Operations\' tab of any database '
-                            . 'to set it up there.'
-                        );
+                        __('Or alternately go to \'Operations\' tab of any database to set it up there.');
                 }
 
                 $messageInstance = Message::notice($messageText);
@@ -258,55 +248,6 @@ class HomeController extends AbstractController
         ]);
     }
 
-    public function setCollationConnection(): void
-    {
-        $this->config->setUserValue(
-            null,
-            'DefaultConnectionCollation',
-            $_POST['collation_connection'],
-            'utf8mb4_unicode_ci'
-        );
-
-        $this->response->header('Location: index.php?route=/' . Url::getCommonRaw([], '&'));
-    }
-
-    public function reloadRecentTablesList(): void
-    {
-        if (! $this->response->isAjax()) {
-            return;
-        }
-
-        $this->response->addJSON([
-            'list' => RecentFavoriteTable::getInstance('recent')->getHtmlList(),
-        ]);
-    }
-
-    public function gitRevision(): void
-    {
-        if (! $this->response->isAjax()) {
-            return;
-        }
-
-        $git = new Git($this->config->get('ShowGitRevision') ?? true);
-
-        if (! $git->isGitRevision()) {
-            return;
-        }
-
-        $commit = $git->checkGitRevision();
-
-        if (! $git->hasGitInformation() || $commit === null) {
-            $this->response->setRequestStatus(false);
-
-            return;
-        }
-
-        $commit['author']['date'] = Util::localisedDate(strtotime($commit['author']['date']));
-        $commit['committer']['date'] = Util::localisedDate(strtotime($commit['committer']['date']));
-
-        $this->render('home/git_info', $commit);
-    }
-
     private function checkRequirements(): void
     {
         global $cfg, $server;
@@ -335,10 +276,7 @@ class HomeController extends AbstractController
         /**
          * Check whether LoginCookieValidity is limited by LoginCookieStore.
          */
-        if (
-            $cfg['LoginCookieStore'] != 0
-            && $cfg['LoginCookieStore'] < $cfg['LoginCookieValidity']
-        ) {
+        if ($cfg['LoginCookieStore'] != 0 && $cfg['LoginCookieStore'] < $cfg['LoginCookieValidity']) {
             trigger_error(
                 __(
                     'Login cookie store is lower than cookie validity configured in ' .
@@ -380,10 +318,14 @@ class HomeController extends AbstractController
                     ),
                     E_USER_WARNING
                 );
-            } elseif (strlen($cfg['blowfish_secret']) < 32) {
+            } elseif (mb_strlen($cfg['blowfish_secret'], '8bit') !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
                 trigger_error(
-                    __(
-                        'The secret passphrase in configuration (blowfish_secret) is too short.'
+                    sprintf(
+                        __(
+                            'The secret passphrase in configuration (blowfish_secret) is not the correct length.'
+                            . ' It should be %d bytes long.'
+                        ),
+                        SODIUM_CRYPTO_SECRETBOX_KEYBYTES
                     ),
                     E_USER_WARNING
                 );
@@ -418,8 +360,7 @@ class HomeController extends AbstractController
             trigger_error(
                 sprintf(
                     __(
-                        'Server running with Suhosin. Please refer ' .
-                        'to %sdocumentation%s for possible issues.'
+                        'Server running with Suhosin. Please refer to %sdocumentation%s for possible issues.'
                     ),
                     '[doc@faq1-38]',
                     '[/doc]'
@@ -459,6 +400,7 @@ class HomeController extends AbstractController
             return;
         }
 
+        /** @psalm-suppress MissingFile */
         include ROOT_PATH . 'libraries/language_stats.inc.php';
         /*
          * This message is intentionally not translated, because we're

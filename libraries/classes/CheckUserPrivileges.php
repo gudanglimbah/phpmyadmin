@@ -14,7 +14,7 @@ use function mb_strpos;
 use function mb_substr;
 use function preg_match;
 use function preg_replace;
-use function strpos;
+use function str_contains;
 
 /**
  * PhpMyAdmin\CheckUserPrivileges class
@@ -55,11 +55,7 @@ class CheckUserPrivileges
             $tableNameStartOffset = mb_strpos($row, '.', $dbNameOffset);
         }
 
-        $showGrantsDbName = mb_substr(
-            $row,
-            $dbNameOffset,
-            $tableNameStartOffset - $dbNameOffset
-        );
+        $showGrantsDbName = mb_substr($row, $dbNameOffset, $tableNameStartOffset - $dbNameOffset);
 
         $showGrantsDbName = Util::unQuote($showGrantsDbName, '`');
 
@@ -102,27 +98,18 @@ class CheckUserPrivileges
         if (
             $showGrantsString !== 'ALL'
             && $showGrantsString !== 'ALL PRIVILEGES'
-            && (mb_strpos(
-                $showGrantsString,
-                'SELECT, INSERT, UPDATE, DELETE'
-            ) === false)
+            && (mb_strpos($showGrantsString, 'SELECT, INSERT, UPDATE, DELETE') === false)
         ) {
             return;
         }
 
-        if (
-            $showGrantsDbName === '*'
-            && $showGrantsTableName === '*'
-        ) {
+        if ($showGrantsDbName === '*' && $showGrantsTableName === '*') {
             $GLOBALS['col_priv'] = true;
             $GLOBALS['db_priv'] = true;
             $GLOBALS['proc_priv'] = true;
             $GLOBALS['table_priv'] = true;
 
-            if (
-                $showGrantsString === 'ALL PRIVILEGES'
-                || $showGrantsString === 'ALL'
-            ) {
+            if ($showGrantsString === 'ALL PRIVILEGES' || $showGrantsString === 'ALL') {
                 $GLOBALS['is_reload_priv'] = true;
             }
         }
@@ -175,40 +162,22 @@ class CheckUserPrivileges
     private function analyseShowGrant(): void
     {
         if (SessionCache::has('is_create_db_priv')) {
-            $GLOBALS['is_create_db_priv'] = SessionCache::get(
-                'is_create_db_priv'
-            );
-            $GLOBALS['is_reload_priv'] = SessionCache::get(
-                'is_reload_priv'
-            );
-            $GLOBALS['db_to_create'] = SessionCache::get(
-                'db_to_create'
-            );
-            $GLOBALS['dbs_where_create_table_allowed'] = SessionCache::get(
-                'dbs_where_create_table_allowed'
-            );
-            $GLOBALS['dbs_to_test'] = SessionCache::get(
-                'dbs_to_test'
-            );
+            $GLOBALS['is_create_db_priv'] = SessionCache::get('is_create_db_priv');
+            $GLOBALS['is_reload_priv'] = SessionCache::get('is_reload_priv');
+            $GLOBALS['db_to_create'] = SessionCache::get('db_to_create');
+            $GLOBALS['dbs_where_create_table_allowed'] = SessionCache::get('dbs_where_create_table_allowed');
+            $GLOBALS['dbs_to_test'] = SessionCache::get('dbs_to_test');
 
-            $GLOBALS['db_priv'] = SessionCache::get(
-                'db_priv'
-            );
-            $GLOBALS['col_priv'] = SessionCache::get(
-                'col_priv'
-            );
-            $GLOBALS['table_priv'] = SessionCache::get(
-                'table_priv'
-            );
-            $GLOBALS['proc_priv'] = SessionCache::get(
-                'proc_priv'
-            );
+            $GLOBALS['db_priv'] = SessionCache::get('db_priv');
+            $GLOBALS['col_priv'] = SessionCache::get('col_priv');
+            $GLOBALS['table_priv'] = SessionCache::get('table_priv');
+            $GLOBALS['proc_priv'] = SessionCache::get('proc_priv');
 
             return;
         }
 
         // defaults
-        $GLOBALS['is_create_db_priv']  = false;
+        $GLOBALS['is_create_db_priv'] = false;
         $GLOBALS['is_reload_priv'] = false;
         $GLOBALS['db_to_create'] = '';
         $GLOBALS['dbs_where_create_table_allowed'] = [];
@@ -227,7 +196,7 @@ class CheckUserPrivileges
         $re0 = '(^|(\\\\\\\\)+|[^\\\\])'; // non-escaped wildcards
         $re1 = '(^|[^\\\\])(\\\)+'; // escaped wildcards
 
-        while ($row = $this->dbi->fetchRow($showGrantsResult)) {
+        while ($row = $showGrantsResult->fetchRow()) {
             [
                 $showGrantsString,
                 $showGrantsDbName,
@@ -242,16 +211,12 @@ class CheckUserPrivileges
                 $GLOBALS['dbs_to_test'][] = $showGrantsDbName;
             }
 
-            if (mb_strpos($showGrantsString, 'RELOAD') !== false) {
+            if (str_contains($showGrantsString, 'RELOAD')) {
                 $GLOBALS['is_reload_priv'] = true;
             }
 
             // check for the required privileges for adjust
-            $this->checkRequiredPrivilegesForAdjust(
-                $showGrantsString,
-                $showGrantsDbName,
-                $showGrantsTableName
-            );
+            $this->checkRequiredPrivilegesForAdjust($showGrantsString, $showGrantsDbName, $showGrantsTableName);
 
             /**
              * @todo if we find CREATE VIEW but not CREATE, do not offer
@@ -261,7 +226,7 @@ class CheckUserPrivileges
                 $showGrantsString !== 'ALL'
                 && $showGrantsString !== 'ALL PRIVILEGES'
                 && $showGrantsString !== 'CREATE'
-                && strpos($showGrantsString, 'CREATE,') === false
+                && ! str_contains($showGrantsString, 'CREATE,')
             ) {
                 continue;
             }
@@ -270,7 +235,7 @@ class CheckUserPrivileges
                 // a global CREATE privilege
                 $GLOBALS['is_create_db_priv'] = true;
                 $GLOBALS['is_reload_priv'] = true;
-                $GLOBALS['db_to_create']   = '';
+                $GLOBALS['db_to_create'] = '';
                 $GLOBALS['dbs_where_create_table_allowed'][] = '*';
                 // @todo we should not break here, cause GRANT ALL *.*
                 // could be revoked by a later rule like GRANT SELECT ON db.*
@@ -298,7 +263,7 @@ class CheckUserPrivileges
                         $dbNameToTest
                     )
                 )
-                || mb_substr((string) $this->dbi->getError(), 1, 4) == 1044)
+                || mb_substr($this->dbi->getError(), 1, 4) == 1044)
             ) {
                 continue;
             }
@@ -307,16 +272,8 @@ class CheckUserPrivileges
              * Do not handle the underscore wildcard
              * (this case must be rare anyway)
              */
-            $GLOBALS['db_to_create'] = preg_replace(
-                '/' . $re0 . '%/',
-                '\\1',
-                $showGrantsDbName
-            );
-            $GLOBALS['db_to_create'] = preg_replace(
-                '/' . $re1 . '(%|_)/',
-                '\\1\\3',
-                $GLOBALS['db_to_create']
-            );
+            $GLOBALS['db_to_create'] = preg_replace('/' . $re0 . '%/', '\\1', $showGrantsDbName);
+            $GLOBALS['db_to_create'] = preg_replace('/' . $re1 . '(%|_)/', '\\1\\3', $GLOBALS['db_to_create']);
             $GLOBALS['is_create_db_priv'] = true;
 
             /**
@@ -327,17 +284,12 @@ class CheckUserPrivileges
              //break;
         }
 
-        $this->dbi->freeResult($showGrantsResult);
-
         // must also cacheUnset() them in
         // PhpMyAdmin\Plugins\Auth\AuthenticationCookie
         SessionCache::set('is_create_db_priv', $GLOBALS['is_create_db_priv']);
         SessionCache::set('is_reload_priv', $GLOBALS['is_reload_priv']);
         SessionCache::set('db_to_create', $GLOBALS['db_to_create']);
-        SessionCache::set(
-            'dbs_where_create_table_allowed',
-            $GLOBALS['dbs_where_create_table_allowed']
-        );
+        SessionCache::set('dbs_where_create_table_allowed', $GLOBALS['dbs_where_create_table_allowed']);
         SessionCache::set('dbs_to_test', $GLOBALS['dbs_to_test']);
 
         SessionCache::set('proc_priv', $GLOBALS['proc_priv']);

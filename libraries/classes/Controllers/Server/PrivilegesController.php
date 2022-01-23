@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Controllers\Server;
 
 use PhpMyAdmin\CheckUserPrivileges;
+use PhpMyAdmin\ConfigStorage\Relation;
+use PhpMyAdmin\ConfigStorage\RelationCleanup;
 use PhpMyAdmin\Controllers\AbstractController;
 use PhpMyAdmin\Controllers\Database\PrivilegesController as DatabaseController;
 use PhpMyAdmin\Controllers\Table\PrivilegesController as TableController;
@@ -12,9 +14,7 @@ use PhpMyAdmin\Core;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Message;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\RelationCleanup;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Server\Plugins;
 use PhpMyAdmin\Server\Privileges;
 use PhpMyAdmin\Template;
@@ -25,9 +25,11 @@ use function __;
 use function header;
 use function implode;
 use function is_array;
+use function is_string;
 use function ob_get_clean;
 use function ob_start;
 use function str_replace;
+use function strtolower;
 use function urlencode;
 
 /**
@@ -41,18 +43,18 @@ class PrivilegesController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, Relation $relation, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        Relation $relation,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template);
         $this->relation = $relation;
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $table, $errorUrl, $message, $text_dir, $post_patterns;
         global $username, $hostname, $dbname, $tablename, $routinename, $db_and_table, $dbname_is_wildcard;
@@ -63,9 +65,9 @@ class PrivilegesController extends AbstractController
         $checkUserPrivileges = new CheckUserPrivileges($this->dbi);
         $checkUserPrivileges->getPrivileges();
 
-        $cfgRelation = $this->relation->getRelationsParam();
+        $relationParameters = $this->relation->getRelationParameters();
 
-        $this->addScriptFiles(['server/privileges.js', 'vendor/zxcvbn.js']);
+        $this->addScriptFiles(['server/privileges.js', 'vendor/zxcvbn-ts.js']);
 
         $relationCleanup = new RelationCleanup($this->dbi, $this->relation);
         $serverPrivileges = new Privileges(
@@ -96,7 +98,7 @@ class PrivilegesController extends AbstractController
         if (
             (isset($_GET['viewing_mode'])
                 && $_GET['viewing_mode'] === 'server')
-            && $GLOBALS['cfgRelation']['menuswork']
+            && $relationParameters->configurableMenusFeature !== null
         ) {
             $this->response->addHTML('<div class="container-fluid">');
             $this->render('server/privileges/subnav', [
@@ -200,10 +202,10 @@ class PrivilegesController extends AbstractController
             $_add_user_error,
         ] = $serverPrivileges->addUser(
             $dbname ?? null,
-            $username ?? null,
-            $hostname ?? null,
+            $username ?? '',
+            $hostname ?? '',
             $password ?? null,
-            (bool) $cfgRelation['menuswork']
+            $relationParameters->configurableMenusFeature !== null
         );
         //update the old variables
         if (isset($ret_queries)) {
@@ -219,16 +221,12 @@ class PrivilegesController extends AbstractController
         /**
          * Changes / copies a user, part III
          */
-        if (isset($_POST['change_copy'])) {
-            $queries = $serverPrivileges->getDbSpecificPrivsQueriesForChangeOrCopyUser(
-                $queries,
-                $username,
-                $hostname
-            );
+        if (isset($_POST['change_copy']) && $username !== null && $hostname !== null) {
+            $queries = $serverPrivileges->getDbSpecificPrivsQueriesForChangeOrCopyUser($queries, $username, $hostname);
         }
 
         $itemType = '';
-        if (! empty($routinename)) {
+        if (! empty($routinename) && is_string($dbname)) {
             $itemType = $serverPrivileges->getRoutineType($dbname, $routinename);
         }
 
@@ -263,10 +261,10 @@ class PrivilegesController extends AbstractController
          * Assign users to user groups
          */
         if (
-            ! empty($_POST['changeUserGroup']) && $cfgRelation['menuswork']
+            ! empty($_POST['changeUserGroup']) && $relationParameters->configurableMenusFeature !== null
             && $this->dbi->isSuperUser() && $this->dbi->isCreateUser()
         ) {
-            $serverPrivileges->setUserGroup($username, $_POST['userGroup']);
+            $serverPrivileges->setUserGroup($username ?? '', $_POST['userGroup']);
             $message = Message::success();
         }
 
@@ -275,10 +273,10 @@ class PrivilegesController extends AbstractController
          */
         if (isset($_POST['revokeall'])) {
             [$message, $sql_query] = $serverPrivileges->getMessageAndSqlQueryForPrivilegesRevoke(
-                ($dbname ?? ''),
+                (is_string($dbname) ? $dbname : ''),
                 ($tablename ?? ($routinename ?? '')),
-                $username,
-                $hostname,
+                $username ?? '',
+                $hostname ?? '',
                 $itemType
             );
         }
@@ -287,21 +285,14 @@ class PrivilegesController extends AbstractController
          * Updates the password
          */
         if (isset($_POST['change_pw'])) {
-            $message = $serverPrivileges->updatePassword(
-                $errorUrl,
-                $username,
-                $hostname
-            );
+            $message = $serverPrivileges->updatePassword($errorUrl, $username ?? '', $hostname ?? '');
         }
 
         /**
          * Deletes users
          *   (Changes / copies a user, part IV)
          */
-        if (
-            isset($_POST['delete'])
-            || (isset($_POST['change_copy']) && $_POST['mode'] < 4)
-        ) {
+        if (isset($_POST['delete']) || (isset($_POST['change_copy']) && $_POST['mode'] < 4)) {
             $queries = $serverPrivileges->getDataForDeleteUsers($queries);
             if (empty($_POST['change_copy'])) {
                 [$sql_query, $message] = $serverPrivileges->deleteUser($queries);
@@ -373,7 +364,7 @@ class PrivilegesController extends AbstractController
                 $tooltip_truename,
                 $tooltip_aliasname,
                 $pos,
-            ] = Util::getDbInfo($db, $sub_part ?? '');
+            ] = Util::getDbInfo($db, $sub_part);
 
             $content = ob_get_clean();
             $this->response->addHTML($content . "\n");
@@ -383,14 +374,8 @@ class PrivilegesController extends AbstractController
         }
 
         // export user definition
-        if (
-            isset($_GET['export'])
-            || (isset($_POST['submit_mult']) && $_POST['submit_mult'] === 'export')
-        ) {
-            [$title, $export] = $serverPrivileges->getListForExportUserDefinition(
-                $username ?? '',
-                $hostname ?? ''
-            );
+        if (isset($_GET['export']) || (isset($_POST['submit_mult']) && $_POST['submit_mult'] === 'export')) {
+            [$title, $export] = $serverPrivileges->getListForExportUserDefinition($username ?? '', $hostname ?? '');
 
             unset($username, $hostname, $grants, $one_grant);
 
@@ -408,23 +393,23 @@ class PrivilegesController extends AbstractController
         if (isset($_GET['adduser']) || $_add_user_error === true) {
             // Add user
             $this->response->addHTML(
-                $serverPrivileges->getHtmlForAddUser(($dbname ?? ''))
+                $serverPrivileges->getHtmlForAddUser(Util::escapeMysqlWildcards(is_string($dbname) ? $dbname : ''))
             );
         } elseif (isset($_GET['checkprivsdb'])) {
             if (isset($_GET['checkprivstable'])) {
-                $this->response->addHTML($tableController->index([
-                    'checkprivsdb' => $_GET['checkprivsdb'],
+                $this->response->addHTML($tableController([
+                    'checkprivsdb' => strtolower($_GET['checkprivsdb']),
                     'checkprivstable' => $_GET['checkprivstable'],
                 ]));
+                $this->render('export_modal');
             } elseif ($this->response->isAjax() === true && empty($_REQUEST['ajax_page_request'])) {
                 $message = Message::success(__('User has been added.'));
                 $this->response->addJSON('message', $message);
 
                 return;
             } else {
-                $this->response->addHTML($databaseController->index([
-                    'checkprivsdb' => $_GET['checkprivsdb'],
-                ]));
+                $this->response->addHTML($databaseController(['checkprivsdb' => strtolower($_GET['checkprivsdb'])]));
+                $this->render('export_modal');
             }
         } else {
             if (isset($dbname) && ! is_array($dbname)) {
@@ -453,9 +438,9 @@ class PrivilegesController extends AbstractController
                     $serverPrivileges->getHtmlForRoutineSpecificPrivileges(
                         $username,
                         $hostname ?? '',
-                        $dbname,
+                        is_string($dbname) ? $dbname : '',
                         $routinename,
-                        $url_dbname ?? ''
+                        Util::escapeMysqlWildcards($url_dbname ?? '')
                     )
                 );
             } else {
@@ -468,7 +453,7 @@ class PrivilegesController extends AbstractController
                 $this->response->addHTML(
                     $serverPrivileges->getHtmlForUserProperties(
                         $dbname_is_wildcard,
-                        $url_dbname ?? '',
+                        Util::escapeMysqlWildcards($url_dbname ?? ''),
                         $username,
                         $hostname ?? '',
                         $dbname ?? '',
@@ -479,8 +464,9 @@ class PrivilegesController extends AbstractController
         }
 
         if (
-            (! isset($_GET['viewing_mode']) || $_GET['viewing_mode'] !== 'server')
-            || ! $cfgRelation['menuswork']
+            ! isset($_GET['viewing_mode'])
+            || $_GET['viewing_mode'] !== 'server'
+            || $relationParameters->configurableMenusFeature === null
         ) {
             return;
         }

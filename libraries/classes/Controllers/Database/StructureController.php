@@ -7,28 +7,22 @@ namespace PhpMyAdmin\Controllers\Database;
 use PhpMyAdmin\Charsets;
 use PhpMyAdmin\CheckUserPrivileges;
 use PhpMyAdmin\Config\PageSettings;
-use PhpMyAdmin\Core;
-use PhpMyAdmin\Database\CentralColumns;
+use PhpMyAdmin\ConfigStorage\Relation;
+use PhpMyAdmin\ConfigStorage\RelationCleanup;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\FlashMessages;
 use PhpMyAdmin\Html\Generator;
-use PhpMyAdmin\Message;
 use PhpMyAdmin\Operations;
 use PhpMyAdmin\RecentFavoriteTable;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\RelationCleanup;
 use PhpMyAdmin\Replication;
 use PhpMyAdmin\ReplicationInfo;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Sanitize;
-use PhpMyAdmin\Sql;
-use PhpMyAdmin\Table;
+use PhpMyAdmin\StorageEngine;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Tracker;
-use PhpMyAdmin\Transformations;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
-use PhpMyAdmin\Utils\ForeignKey;
 
 use function __;
 use function array_search;
@@ -38,15 +32,11 @@ use function htmlspecialchars;
 use function implode;
 use function in_array;
 use function is_string;
-use function json_decode;
-use function json_encode;
 use function max;
-use function mb_strlen;
 use function mb_substr;
 use function md5;
 use function preg_match;
 use function preg_quote;
-use function sha1;
 use function sprintf;
 use function str_replace;
 use function strlen;
@@ -97,22 +87,15 @@ class StructureController extends AbstractController
     /** @var FlashMessages */
     private $flash;
 
-    /**
-     * @param Response          $response
-     * @param string            $db          Database name
-     * @param Relation          $relation
-     * @param Replication       $replication
-     * @param DatabaseInterface $dbi
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
-        $db,
-        $relation,
-        $replication,
+        string $db,
+        Relation $relation,
+        Replication $replication,
         RelationCleanup $relationCleanup,
         Operations $operations,
-        $dbi,
+        DatabaseInterface $dbi,
         FlashMessages $flash
     ) {
         parent::__construct($response, $template, $db);
@@ -150,7 +133,7 @@ class StructureController extends AbstractController
         $this->isShowStats = $isShowStats;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $cfg, $db, $errorUrl;
 
@@ -184,7 +167,7 @@ class StructureController extends AbstractController
             ]);
         }
 
-        $this->replicationInfo->load($_POST['master_connection'] ?? null);
+        $this->replicationInfo->load($_POST['primary_connection'] ?? null);
         $replicaInfo = $this->replicationInfo->getReplicaInfo();
 
         $pageSettings = new PageSettings('DbStructure');
@@ -234,197 +217,6 @@ class StructureController extends AbstractController
         ]);
     }
 
-    public function addRemoveFavoriteTablesAction(): void
-    {
-        global $cfg, $db, $errorUrl;
-
-        $parameters = [
-            'favorite_table' => $_REQUEST['favorite_table'] ?? null,
-            'favoriteTables' => $_REQUEST['favoriteTables'] ?? null,
-            'sync_favorite_tables' => $_REQUEST['sync_favorite_tables'] ?? null,
-        ];
-
-        Util::checkParameters(['db']);
-
-        $errorUrl = Util::getScriptNameForOption($cfg['DefaultTabDatabase'], 'database');
-        $errorUrl .= Url::getCommon(['db' => $db], '&');
-
-        if (! $this->hasDatabase() || ! $this->response->isAjax()) {
-            return;
-        }
-
-        $favoriteInstance = RecentFavoriteTable::getInstance('favorite');
-        if (isset($parameters['favoriteTables'])) {
-            $favoriteTables = json_decode($parameters['favoriteTables'], true);
-        } else {
-            $favoriteTables = [];
-        }
-
-        // Required to keep each user's preferences separate.
-        $user = sha1($cfg['Server']['user']);
-
-        // Request for Synchronization of favorite tables.
-        if (isset($parameters['sync_favorite_tables'])) {
-            $cfgRelation = $this->relation->getRelationsParam();
-            if ($cfgRelation['favoritework']) {
-                $this->response->addJSON($this->synchronizeFavoriteTables(
-                    $favoriteInstance,
-                    $user,
-                    $favoriteTables
-                ));
-            }
-
-            return;
-        }
-
-        $changes = true;
-        $favoriteTable = $parameters['favorite_table'] ?? '';
-        $alreadyFavorite = $this->checkFavoriteTable($favoriteTable);
-
-        if (isset($_REQUEST['remove_favorite'])) {
-            if ($alreadyFavorite) {
-                // If already in favorite list, remove it.
-                $favoriteInstance->remove($this->db, $favoriteTable);
-                $alreadyFavorite = false; // for favorite_anchor template
-            }
-        } elseif (isset($_REQUEST['add_favorite'])) {
-            if (! $alreadyFavorite) {
-                $numTables = count($favoriteInstance->getTables());
-                if ($numTables == $cfg['NumFavoriteTables']) {
-                    $changes = false;
-                } else {
-                    // Otherwise add to favorite list.
-                    $favoriteInstance->add($this->db, $favoriteTable);
-                    $alreadyFavorite = true;  // for favorite_anchor template
-                }
-            }
-        }
-
-        $favoriteTables[$user] = $favoriteInstance->getTables();
-
-        $json = [];
-        $json['changes'] = $changes;
-        if (! $changes) {
-            $json['message'] = $this->template->render('components/error_message', [
-                'msg' => __('Favorite List is full!'),
-            ]);
-            $this->response->addJSON($json);
-
-            return;
-        }
-
-        // Check if current table is already in favorite list.
-        $favoriteParams = [
-            'db' => $this->db,
-            'ajax_request' => true,
-            'favorite_table' => $favoriteTable,
-            ($alreadyFavorite ? 'remove' : 'add') . '_favorite' => true,
-        ];
-
-        $json['user'] = $user;
-        $json['favoriteTables'] = json_encode($favoriteTables);
-        $json['list'] = $favoriteInstance->getHtmlList();
-        $json['anchor'] = $this->template->render('database/structure/favorite_anchor', [
-            'table_name_hash' => md5($favoriteTable),
-            'db_table_name_hash' => md5($this->db . '.' . $favoriteTable),
-            'fav_params' => $favoriteParams,
-            'already_favorite' => $alreadyFavorite,
-        ]);
-
-        $this->response->addJSON($json);
-    }
-
-    /**
-     * Handles request for real row count on database level view page.
-     */
-    public function handleRealRowCountRequestAction(): void
-    {
-        global $cfg, $db, $errorUrl;
-
-        $parameters = [
-            'real_row_count_all' => $_REQUEST['real_row_count_all'] ?? null,
-            'table' => $_REQUEST['table'] ?? null,
-        ];
-
-        Util::checkParameters(['db']);
-
-        $errorUrl = Util::getScriptNameForOption($cfg['DefaultTabDatabase'], 'database');
-        $errorUrl .= Url::getCommon(['db' => $db], '&');
-
-        if (! $this->hasDatabase() || ! $this->response->isAjax()) {
-            return;
-        }
-
-        // If there is a request to update all table's row count.
-        if (! isset($parameters['real_row_count_all'])) {
-            // Get the real row count for the table.
-            $realRowCount = (int) $this->dbi
-                ->getTable($this->db, (string) $parameters['table'])
-                ->getRealRowCountTable();
-            // Format the number.
-            $realRowCount = Util::formatNumber($realRowCount, 0);
-
-            $this->response->addJSON(['real_row_count' => $realRowCount]);
-
-            return;
-        }
-
-        // Array to store the results.
-        $realRowCountAll = [];
-        // Iterate over each table and fetch real row count.
-        foreach ($this->tables as $table) {
-            $rowCount = $this->dbi
-                ->getTable($this->db, $table['TABLE_NAME'])
-                ->getRealRowCountTable();
-            $realRowCountAll[] = [
-                'table' => $table['TABLE_NAME'],
-                'row_count' => $rowCount,
-            ];
-        }
-
-        $this->response->addJSON(['real_row_count_all' => json_encode($realRowCountAll)]);
-    }
-
-    public function copyTable(): void
-    {
-        global $db, $message;
-
-        $selected = $_POST['selected'] ?? [];
-        $targetDb = $_POST['target_db'] ?? null;
-        $selectedCount = count($selected);
-
-        for ($i = 0; $i < $selectedCount; $i++) {
-            Table::moveCopy(
-                $db,
-                $selected[$i],
-                $targetDb,
-                $selected[$i],
-                $_POST['what'],
-                false,
-                'one_table'
-            );
-
-            if (empty($_POST['adjust_privileges'])) {
-                continue;
-            }
-
-            $this->operations->adjustPrivilegesCopyTable(
-                $db,
-                $selected[$i],
-                $targetDb,
-                $selected[$i]
-            );
-        }
-
-        $message = Message::success();
-
-        if (empty($_POST['message'])) {
-            $_POST['message'] = $message;
-        }
-
-        $this->index();
-    }
-
     /**
      * @param array $replicaInfo
      */
@@ -443,14 +235,14 @@ class StructureController extends AbstractController
         $numColumns = $GLOBALS['cfg']['PropertiesNumColumns'] > 1
             ? ceil($this->numTables / $GLOBALS['cfg']['PropertiesNumColumns']) + 1
             : 0;
-        $rowCount      = 0;
-        $sumSize       = 0;
-        $overheadSize  = 0;
+        $rowCount = 0;
+        $sumSize = 0;
+        $overheadSize = 0;
 
         $hiddenFields = [];
         $overallApproxRows = false;
         $structureTableRows = [];
-        foreach ($this->tables as $keyname => $currentTable) {
+        foreach ($this->tables as $currentTable) {
             // Get valid statistics whatever is the table type
 
             $dropQuery = '';
@@ -474,11 +266,7 @@ class StructureController extends AbstractController
                 $overheadSize,
                 $tableIsView,
                 $sumSize,
-            ] = $this->getStuffForEngineTypeTable(
-                $currentTable,
-                $sumSize,
-                $overheadSize
-            );
+            ] = $this->getStuffForEngineTypeTable($currentTable, $sumSize, $overheadSize);
 
             $curTable = $this->dbi
                 ->getTable($this->db, $currentTable['TABLE_NAME']);
@@ -523,33 +311,21 @@ class StructureController extends AbstractController
 
             if ($GLOBALS['cfg']['ShowDbStructureCreation']) {
                 $createTime = $currentTable['Create_time'] ?? '';
-                if (
-                    $createTime
-                    && (! $createTimeAll
-                    || $createTime < $createTimeAll)
-                ) {
+                if ($createTime && (! $createTimeAll || $createTime < $createTimeAll)) {
                     $createTimeAll = $createTime;
                 }
             }
 
             if ($GLOBALS['cfg']['ShowDbStructureLastUpdate']) {
                 $updateTime = $currentTable['Update_time'] ?? '';
-                if (
-                    $updateTime
-                    && (! $updateTimeAll
-                    || $updateTime < $updateTimeAll)
-                ) {
+                if ($updateTime && (! $updateTimeAll || $updateTime < $updateTimeAll)) {
                     $updateTimeAll = $updateTime;
                 }
             }
 
             if ($GLOBALS['cfg']['ShowDbStructureLastCheck']) {
                 $checkTime = $currentTable['Check_time'] ?? '';
-                if (
-                    $checkTime
-                    && (! $checkTimeAll
-                    || $checkTime < $checkTimeAll)
-                ) {
+                if ($checkTime && (! $checkTimeAll || $checkTime < $checkTimeAll)) {
                     $checkTimeAll = $checkTime;
                 }
             }
@@ -597,11 +373,7 @@ class StructureController extends AbstractController
                 );
             }
 
-            if (
-                $numColumns > 0
-                && $this->numTables > $numColumns
-                && ($rowCount % $numColumns) == 0
-            ) {
+            if ($numColumns > 0 && $this->numTables > $numColumns && ($rowCount % $numColumns) == 0) {
                 $rowCount = 1;
 
                 $html .= $this->template->render('database/structure/table_header', [
@@ -621,10 +393,7 @@ class StructureController extends AbstractController
                 $structureTableRows = [];
             }
 
-            [$approxRows, $showSuperscript] = $this->isRowCountApproximated(
-                $currentTable,
-                $tableIsView
-            );
+            [$approxRows, $showSuperscript] = $this->isRowCountApproximated($currentTable, $tableIsView);
 
             [$do, $ignored] = $this->getReplicationStatus($replicaInfo, $truename);
 
@@ -639,9 +408,7 @@ class StructureController extends AbstractController
                 'may_have_rows' => $mayHaveRows,
                 'browse_table_label_title' => htmlspecialchars($currentTable['TABLE_COMMENT']),
                 'browse_table_label_truename' => $truename,
-                'empty_table_sql_query' => 'TRUNCATE ' . Util::backquote(
-                    $currentTable['TABLE_NAME']
-                ),
+                'empty_table_sql_query' => 'TRUNCATE ' . Util::backquote($currentTable['TABLE_NAME']),
                 'empty_table_message_to_show' => urlencode(
                     sprintf(
                         __('Table %s has been emptied.'),
@@ -651,7 +418,7 @@ class StructureController extends AbstractController
                     )
                 ),
                 'tracking_icon' => $this->getTrackingIcon($truename),
-                'server_slave_status' => $replicaInfo['status'],
+                'server_replica_status' => $replicaInfo['status'],
                 'table_url_params' => $tableUrlParams,
                 'db_is_system_schema' => $this->dbIsSystemSchema,
                 'drop_query' => $dropQuery,
@@ -672,9 +439,7 @@ class StructureController extends AbstractController
                 'do' => $do,
                 'approx_rows' => $approxRows,
                 'show_superscript' => $showSuperscript,
-                'already_favorite' => $this->checkFavoriteTable(
-                    $currentTable['TABLE_NAME']
-                ),
+                'already_favorite' => $this->checkFavoriteTable($currentTable['TABLE_NAME']),
                 'num_favorite_tables' => $GLOBALS['cfg']['NumFavoriteTables'],
                 'properties_num_columns' => $GLOBALS['cfg']['PropertiesNumColumns'],
                 'limit_chars' => $GLOBALS['cfg']['LimitChars'],
@@ -703,6 +468,8 @@ class StructureController extends AbstractController
             $databaseCharset = $collation->getCharset();
         }
 
+        $relationParameters = $this->relation->getRelationParameters();
+
         return $html . $this->template->render('database/structure/table_header', [
             'db' => $this->db,
             'db_is_system_schema' => $this->dbIsSystemSchema,
@@ -718,7 +485,7 @@ class StructureController extends AbstractController
             'structure_table_rows' => $structureTableRows,
             'body_for_table_summary' => [
                 'num_tables' => $this->numTables,
-                'server_slave_status' => $replicaInfo['status'],
+                'server_replica_status' => $replicaInfo['status'],
                 'db_is_system_schema' => $this->dbIsSystemSchema,
                 'sum_entries' => $sumEntries,
                 'database_collation' => $databaseCollation,
@@ -746,7 +513,7 @@ class StructureController extends AbstractController
                 'db_is_system_schema' => $this->dbIsSystemSchema,
                 'hidden_fields' => $hiddenFields,
                 'disable_multi_table' => $GLOBALS['cfg']['DisableMultiTableMaintenance'],
-                'central_columns_work' => $GLOBALS['cfgRelation']['centralcolumnswork'] ?? null,
+                'central_columns_work' => $relationParameters->centralColumnsFeature !== null,
             ],
         ]);
     }
@@ -763,10 +530,7 @@ class StructureController extends AbstractController
         $trackingIcon = '';
         if (Tracker::isActive()) {
             $isTracked = Tracker::isTracked($this->db, $table);
-            if (
-                $isTracked
-                || Tracker::getVersion($this->db, $table) > 0
-            ) {
+            if ($isTracked || Tracker::getVersion($this->db, $table) > 0) {
                 $trackingIcon = $this->template->render('database/structure/tracking_icon', [
                     'db' => $this->db,
                     'table' => $table,
@@ -798,26 +562,19 @@ class StructureController extends AbstractController
         // - when it's a view
         //  so ensure that we'll display "in use" below for a table
         //  that needs to be repaired
-        if (
-            isset($currentTable['TABLE_ROWS'])
-            && ($currentTable['ENGINE'] != null || $tableIsView)
-        ) {
+        if (isset($currentTable['TABLE_ROWS']) && ($currentTable['ENGINE'] != null || $tableIsView)) {
             // InnoDB/TokuDB table: we did not get an accurate row count
             $approxRows = ! $tableIsView
                 && in_array($currentTable['ENGINE'], ['InnoDB', 'TokuDB'])
                 && ! $currentTable['COUNTED'];
 
-            if (
-                $tableIsView
-                && $currentTable['TABLE_ROWS'] >= $GLOBALS['cfg']['MaxExactCountViews']
-            ) {
+            if ($tableIsView && $currentTable['TABLE_ROWS'] >= $GLOBALS['cfg']['MaxExactCountViews']) {
                 $approxRows = true;
                 $showSuperscript = Generator::showHint(
                     Sanitize::sanitizeMessage(
                         sprintf(
                             __(
-                                'This view has at least this number of '
-                                . 'rows. Please refer to %sdocumentation%s.'
+                                'This view has at least this number of rows. Please refer to %sdocumentation%s.'
                             ),
                             '[doc@cfg_MaxExactCountViews]',
                             '[/doc]'
@@ -845,87 +602,27 @@ class StructureController extends AbstractController
     {
         $do = $ignored = false;
         if ($replicaInfo['status']) {
-            $nbServSlaveDoDb = count(
-                $replicaInfo['Do_DB']
-            );
-            $nbServSlaveIgnoreDb = count(
-                $replicaInfo['Ignore_DB']
-            );
-            $searchDoDBInTruename = array_search(
-                $table,
-                $replicaInfo['Do_DB']
-            );
-            $searchDoDBInDB = array_search(
-                $this->db,
-                $replicaInfo['Do_DB']
-            );
+            $nbServReplicaDoDb = count($replicaInfo['Do_DB']);
+            $nbServReplicaIgnoreDb = count($replicaInfo['Ignore_DB']);
+            $searchDoDBInTruename = array_search($table, $replicaInfo['Do_DB']);
+            $searchDoDBInDB = array_search($this->db, $replicaInfo['Do_DB']);
 
             $do = (is_string($searchDoDBInTruename) && strlen($searchDoDBInTruename) > 0)
                 || (is_string($searchDoDBInDB) && strlen($searchDoDBInDB) > 0)
-                || ($nbServSlaveDoDb == 0 && $nbServSlaveIgnoreDb == 0)
-                || $this->hasTable(
-                    $replicaInfo['Wild_Do_Table'],
-                    $table
-                );
+                || ($nbServReplicaDoDb == 0 && $nbServReplicaIgnoreDb == 0)
+                || $this->hasTable($replicaInfo['Wild_Do_Table'], $table);
 
-            $searchDb = array_search(
-                $this->db,
-                $replicaInfo['Ignore_DB']
-            );
-            $searchTable = array_search(
-                $table,
-                $replicaInfo['Ignore_Table']
-            );
+            $searchDb = array_search($this->db, $replicaInfo['Ignore_DB']);
+            $searchTable = array_search($table, $replicaInfo['Ignore_Table']);
             $ignored = (is_string($searchTable) && strlen($searchTable) > 0)
                 || (is_string($searchDb) && strlen($searchDb) > 0)
-                || $this->hasTable(
-                    $replicaInfo['Wild_Ignore_Table'],
-                    $table
-                );
+                || $this->hasTable($replicaInfo['Wild_Ignore_Table'], $table);
         }
 
         return [
             $do,
             $ignored,
         ];
-    }
-
-    /**
-     * Synchronize favorite tables
-     *
-     * @param RecentFavoriteTable $favoriteInstance Instance of this class
-     * @param string              $user             The user hash
-     * @param array               $favoriteTables   Existing favorites
-     *
-     * @return array
-     */
-    protected function synchronizeFavoriteTables(
-        RecentFavoriteTable $favoriteInstance,
-        string $user,
-        array $favoriteTables
-    ): array {
-        $favoriteInstanceTables = $favoriteInstance->getTables();
-
-        if (
-            empty($favoriteInstanceTables)
-            && isset($favoriteTables[$user])
-        ) {
-            foreach ($favoriteTables[$user] as $key => $value) {
-                $favoriteInstance->add($value['db'], $value['table']);
-            }
-        }
-
-        $favoriteTables[$user] = $favoriteInstance->getTables();
-
-        $json = [
-            'favoriteTables' => json_encode($favoriteTables),
-            'list' => $favoriteInstance->getHtmlList(),
-        ];
-        $serverId = $GLOBALS['server'];
-        // Set flag when localStorage and pmadb(if present) are in sync.
-        $_SESSION['tmpval']['favorites_synced'][$serverId] = true;
-
-        return $json;
     }
 
     /**
@@ -952,10 +649,8 @@ class StructureController extends AbstractController
      *
      * @param array  $db       DB to look into
      * @param string $truename Table name
-     *
-     * @return bool
      */
-    protected function hasTable(array $db, $truename)
+    protected function hasTable(array $db, $truename): bool
     {
         foreach ($db as $dbTable) {
             if (
@@ -1043,8 +738,8 @@ class StructureController extends AbstractController
             case 'BerkeleyDB':
                 // Merge or BerkleyDB table: Only row count is accurate.
                 if ($this->isShowStats) {
-                    $formattedSize =  ' - ';
-                    $unit          =  '';
+                    $formattedSize = ' - ';
+                    $unit = '';
                 }
 
                 break;
@@ -1054,18 +749,26 @@ class StructureController extends AbstractController
             case 'SYSTEM VIEW':
                 // possibly a view, do nothing
                 break;
+            case 'Mroonga':
+                // The idea is to show the size only if Mroonga is available,
+                // in other case the old unknown message will appear
+                if (StorageEngine::hasMroongaEngine()) {
+                    [$currentTable, $formattedSize, $unit, $sumSize] = $this->getValuesForMroongaTable(
+                        $currentTable,
+                        $sumSize
+                    );
+                    break;
+                }
+                // no break, go to default case
             default:
                 // Unknown table type.
                 if ($this->isShowStats) {
-                    $formattedSize =  __('unknown');
-                    $unit          =  '';
+                    $formattedSize = __('unknown');
+                    $unit = '';
                 }
         }
 
-        if (
-            $currentTable['TABLE_TYPE'] === 'VIEW'
-            || $currentTable['TABLE_TYPE'] === 'SYSTEM VIEW'
-        ) {
+        if ($currentTable['TABLE_TYPE'] === 'VIEW' || $currentTable['TABLE_TYPE'] === 'SYSTEM VIEW') {
             // countRecords() takes care of $cfg['MaxExactCountViews']
             $currentTable['TABLE_ROWS'] = $this->dbi
                 ->getTable($this->db, $currentTable['TABLE_NAME'])
@@ -1118,15 +821,8 @@ class StructureController extends AbstractController
             $tblsize = $currentTable['Data_length']
                 + $currentTable['Index_length'];
             $sumSize += $tblsize;
-            [$formattedSize, $unit] = Util::formatByteDown(
-                $tblsize,
-                3,
-                $tblsize > 0 ? 1 : 0
-            );
-            if (
-                isset($currentTable['Data_free'])
-                && $currentTable['Data_free'] > 0
-            ) {
+            [$formattedSize, $unit] = Util::formatByteDown($tblsize, 3, $tblsize > 0 ? 1 : 0);
+            if (isset($currentTable['Data_free']) && $currentTable['Data_free'] > 0) {
                 [$formattedOverhead, $overheadUnit] = Util::formatByteDown(
                     $currentTable['Data_free'],
                     3,
@@ -1179,11 +875,7 @@ class StructureController extends AbstractController
             $tblsize = $currentTable['Data_length']
                 + $currentTable['Index_length'];
             $sumSize += $tblsize;
-            [$formattedSize, $unit] = Util::formatByteDown(
-                $tblsize,
-                3,
-                ($tblsize > 0 ? 1 : 0)
-            );
+            [$formattedSize, $unit] = Util::formatByteDown($tblsize, 3, ($tblsize > 0 ? 1 : 0));
         }
 
         return [
@@ -1194,522 +886,33 @@ class StructureController extends AbstractController
         ];
     }
 
-    public function showCreate(): void
-    {
-        $selected = $_POST['selected_tbl'] ?? [];
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $tables = $this->getShowCreateTables($selected);
-
-        $showCreate = $this->template->render('database/structure/show_create', ['tables' => $tables]);
-
-        $this->response->addJSON('message', $showCreate);
-    }
-
     /**
-     * @param string[] $selected Selected tables.
+     * Get values for Mroonga table
      *
-     * @return array<string, array<int, array<string, string>>>
+     * @param array $currentTable current table
+     * @param int   $sumSize      sum size
+     *
+     * @return array
      */
-    private function getShowCreateTables(array $selected): array
-    {
-        $tables = ['tables' => [], 'views' => []];
+    protected function getValuesForMroongaTable(
+        array $currentTable,
+        int $sumSize
+    ): array {
+        $formattedSize = '';
+        $unit = '';
 
-        foreach ($selected as $table) {
-            $object = $this->dbi->getTable($this->db, $table);
-
-            $tables[$object->isView() ? 'views' : 'tables'][] = [
-                'name' => Core::mimeDefaultFunction($table),
-                'show_create' => Core::mimeDefaultFunction($object->showCreate()),
-            ];
+        if ($this->isShowStats) {
+            /** @var int $tblsize */
+            $tblsize = $currentTable['Data_length'] + $currentTable['Index_length'];
+            $sumSize += $tblsize;
+            [$formattedSize, $unit] = Util::formatByteDown($tblsize, 3, ($tblsize > 0 ? 1 : 0));
         }
 
-        return $tables;
-    }
-
-    public function copyForm(): void
-    {
-        global $db, $dblist;
-
-        $selected = $_POST['selected_tbl'] ?? [];
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $urlParams = ['db' => $db];
-        foreach ($selected as $selectedValue) {
-            $urlParams['selected'][] = $selectedValue;
-        }
-
-        $databasesList = $dblist->databases;
-        foreach ($databasesList as $key => $databaseName) {
-            if ($databaseName == $db) {
-                $databasesList->offsetUnset($key);
-                break;
-            }
-        }
-
-        $this->response->disable();
-        $this->render('database/structure/copy_form', [
-            'url_params' => $urlParams,
-            'options' => $databasesList->getList(),
-        ]);
-    }
-
-    public function centralColumnsAdd(): void
-    {
-        global $message;
-
-        $selected = $_POST['selected_tbl'] ?? [];
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $centralColumns = new CentralColumns($this->dbi);
-        $error = $centralColumns->syncUniqueColumns($selected);
-
-        $message = $error instanceof Message ? $error : Message::success(__('Success!'));
-
-        unset($_POST['submit_mult']);
-
-        $this->index();
-    }
-
-    public function centralColumnsMakeConsistent(): void
-    {
-        global $db, $message;
-
-        $selected = $_POST['selected_tbl'] ?? [];
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $centralColumns = new CentralColumns($this->dbi);
-        $error = $centralColumns->makeConsistentWithList($db, $selected);
-
-        $message = $error instanceof Message ? $error : Message::success(__('Success!'));
-
-        unset($_POST['submit_mult']);
-
-        $this->index();
-    }
-
-    public function centralColumnsRemove(): void
-    {
-        global $message;
-
-        $selected = $_POST['selected_tbl'] ?? [];
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $centralColumns = new CentralColumns($this->dbi);
-        $error = $centralColumns->deleteColumnsFromList($_POST['db'], $selected);
-
-        $message = $error instanceof Message ? $error : Message::success(__('Success!'));
-
-        unset($_POST['submit_mult']);
-
-        $this->index();
-    }
-
-    public function addPrefix(): void
-    {
-        global $db;
-
-        $selected = $_POST['selected_tbl'] ?? [];
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $params = ['db' => $db];
-        foreach ($selected as $selectedValue) {
-            $params['selected'][] = $selectedValue;
-        }
-
-        $this->response->disable();
-        $this->render('database/structure/add_prefix', ['url_params' => $params]);
-    }
-
-    public function changePrefixForm(): void
-    {
-        global $db;
-
-        $selected = $_POST['selected_tbl'] ?? [];
-        $submitMult = $_POST['submit_mult'] ?? '';
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $route = '/database/structure/replace-prefix';
-        if ($submitMult === 'copy_tbl_change_prefix') {
-            $route = '/database/structure/copy-table-with-prefix';
-        }
-
-        $urlParams = ['db' => $db];
-        foreach ($selected as $selectedValue) {
-            $urlParams['selected'][] = $selectedValue;
-        }
-
-        $this->response->disable();
-        $this->render('database/structure/change_prefix_form', [
-            'route' => $route,
-            'url_params' => $urlParams,
-        ]);
-    }
-
-    public function dropForm(): void
-    {
-        global $db;
-
-        $selected = $_POST['selected_tbl'] ?? [];
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $views = $this->dbi->getVirtualTables($db);
-
-        $fullQueryViews = '';
-        $fullQuery = '';
-
-        foreach ($selected as $selectedValue) {
-            $current = $selectedValue;
-            if (! empty($views) && in_array($current, $views)) {
-                $fullQueryViews .= (empty($fullQueryViews) ? 'DROP VIEW ' : ', ')
-                    . Util::backquote(htmlspecialchars($current));
-            } else {
-                $fullQuery .= (empty($fullQuery) ? 'DROP TABLE ' : ', ')
-                    . Util::backquote(htmlspecialchars($current));
-            }
-        }
-
-        if (! empty($fullQuery)) {
-            $fullQuery .= ';<br>' . "\n";
-        }
-
-        if (! empty($fullQueryViews)) {
-            $fullQuery .= $fullQueryViews . ';<br>' . "\n";
-        }
-
-        $urlParams = ['db' => $db];
-        foreach ($selected as $selectedValue) {
-            $urlParams['selected'][] = $selectedValue;
-        }
-
-        foreach ($views as $current) {
-            $urlParams['views'][] = $current;
-        }
-
-        $this->render('database/structure/drop_form', [
-            'url_params' => $urlParams,
-            'full_query' => $fullQuery,
-            'is_foreign_key_check' => ForeignKey::isCheckEnabled(),
-        ]);
-    }
-
-    public function emptyForm(): void
-    {
-        global $db;
-
-        $selected = $_POST['selected_tbl'] ?? [];
-
-        if (empty($selected)) {
-            $this->response->setRequestStatus(false);
-            $this->response->addJSON('message', __('No table selected.'));
-
-            return;
-        }
-
-        $fullQuery = '';
-        $urlParams = ['db' => $db];
-
-        foreach ($selected as $selectedValue) {
-            $fullQuery .= 'TRUNCATE ';
-            $fullQuery .= Util::backquote(htmlspecialchars($selectedValue)) . ';<br>';
-            $urlParams['selected'][] = $selectedValue;
-        }
-
-        $this->render('database/structure/empty_form', [
-            'url_params' => $urlParams,
-            'full_query' => $fullQuery,
-            'is_foreign_key_check' => ForeignKey::isCheckEnabled(),
-        ]);
-    }
-
-    public function dropTable(): void
-    {
-        global $db, $message, $reload, $sql_query;
-
-        $reload = $_POST['reload'] ?? $reload ?? null;
-        $multBtn = $_POST['mult_btn'] ?? '';
-        $selected = $_POST['selected'] ?? [];
-
-        $views = $this->dbi->getVirtualTables($db);
-
-        if ($multBtn !== __('Yes')) {
-            $message = Message::success(__('No change'));
-
-            if (empty($_POST['message'])) {
-                $_POST['message'] = Message::success();
-            }
-
-            unset($_POST['mult_btn']);
-
-            $this->index();
-
-            return;
-        }
-
-        $defaultFkCheckValue = ForeignKey::handleDisableCheckInit();
-        $sql_query = '';
-        $sqlQueryViews = '';
-        $selectedCount = count($selected);
-
-        for ($i = 0; $i < $selectedCount; $i++) {
-            $this->relationCleanup->table($db, $selected[$i]);
-            $current = $selected[$i];
-
-            if (! empty($views) && in_array($current, $views)) {
-                $sqlQueryViews .= (empty($sqlQueryViews) ? 'DROP VIEW ' : ', ') . Util::backquote($current);
-            } else {
-                $sql_query .= (empty($sql_query) ? 'DROP TABLE ' : ', ') . Util::backquote($current);
-            }
-
-            $reload = 1;
-        }
-
-        if (! empty($sql_query)) {
-            $sql_query .= ';';
-        } elseif (! empty($sqlQueryViews)) {
-            $sql_query = $sqlQueryViews . ';';
-            unset($sqlQueryViews);
-        }
-
-        // Unset cache values for tables count, issue #14205
-        if (isset($_SESSION['tmpval'])) {
-            if (isset($_SESSION['tmpval']['table_limit_offset'])) {
-                unset($_SESSION['tmpval']['table_limit_offset']);
-            }
-
-            if (isset($_SESSION['tmpval']['table_limit_offset_db'])) {
-                unset($_SESSION['tmpval']['table_limit_offset_db']);
-            }
-        }
-
-        $this->dbi->selectDb($db);
-        $result = $this->dbi->tryQuery($sql_query);
-
-        if ($result && ! empty($sqlQueryViews)) {
-            $sql_query .= ' ' . $sqlQueryViews . ';';
-            $result = $this->dbi->tryQuery($sqlQueryViews);
-            unset($sqlQueryViews);
-        }
-
-        if (! $result) {
-            $message = Message::error((string) $this->dbi->getError());
-        }
-
-        ForeignKey::handleDisableCheckCleanup($defaultFkCheckValue);
-
-        $message = Message::success();
-
-        if (empty($_POST['message'])) {
-            $_POST['message'] = $message;
-        }
-
-        unset($_POST['mult_btn']);
-
-        $this->index();
-    }
-
-    public function emptyTable(): void
-    {
-        global $db, $table, $message, $sql_query;
-
-        $multBtn = $_POST['mult_btn'] ?? '';
-        $selected = $_POST['selected'] ?? [];
-
-        if ($multBtn !== __('Yes')) {
-            $this->flash->addMessage('success', __('No change'));
-            $this->redirect('/database/structure', ['db' => $db]);
-
-            return;
-        }
-
-        $defaultFkCheckValue = ForeignKey::handleDisableCheckInit();
-
-        $sql_query = '';
-        $selectedCount = count($selected);
-
-        for ($i = 0; $i < $selectedCount; $i++) {
-            $aQuery = 'TRUNCATE ';
-            $aQuery .= Util::backquote($selected[$i]);
-
-            $sql_query .= $aQuery . ';' . "\n";
-            $this->dbi->selectDb($db);
-            $this->dbi->query($aQuery);
-        }
-
-        if (! empty($_REQUEST['pos'])) {
-            $sql = new Sql(
-                $this->dbi,
-                $this->relation,
-                $this->relationCleanup,
-                $this->operations,
-                new Transformations(),
-                $this->template
-            );
-
-            $_REQUEST['pos'] = $sql->calculatePosForLastPage($db, $table, $_REQUEST['pos']);
-        }
-
-        ForeignKey::handleDisableCheckCleanup($defaultFkCheckValue);
-
-        $message = Message::success();
-
-        if (empty($_POST['message'])) {
-            $_POST['message'] = $message;
-        }
-
-        unset($_POST['mult_btn']);
-
-        $this->index();
-    }
-
-    public function addPrefixTable(): void
-    {
-        global $db, $message, $sql_query;
-
-        $selected = $_POST['selected'] ?? [];
-
-        $sql_query = '';
-        $selectedCount = count($selected);
-
-        for ($i = 0; $i < $selectedCount; $i++) {
-            $newTableName = $_POST['add_prefix'] . $selected[$i];
-            $aQuery = 'ALTER TABLE ' . Util::backquote($selected[$i])
-                . ' RENAME ' . Util::backquote($newTableName);
-
-            $sql_query .= $aQuery . ';' . "\n";
-            $this->dbi->selectDb($db);
-            $this->dbi->query($aQuery);
-        }
-
-        $message = Message::success();
-
-        if (empty($_POST['message'])) {
-            $_POST['message'] = $message;
-        }
-
-        $this->index();
-    }
-
-    public function replacePrefix(): void
-    {
-        global $db, $message, $sql_query;
-
-        $selected = $_POST['selected'] ?? [];
-        $fromPrefix = $_POST['from_prefix'] ?? '';
-        $toPrefix = $_POST['to_prefix'] ?? '';
-
-        $sql_query = '';
-        $selectedCount = count($selected);
-
-        for ($i = 0; $i < $selectedCount; $i++) {
-            $current = $selected[$i];
-            $subFromPrefix = mb_substr($current, 0, mb_strlen((string) $fromPrefix));
-
-            if ($subFromPrefix === $fromPrefix) {
-                $newTableName = $toPrefix . mb_substr(
-                    $current,
-                    mb_strlen((string) $fromPrefix)
-                );
-            } else {
-                $newTableName = $current;
-            }
-
-            $aQuery = 'ALTER TABLE ' . Util::backquote($selected[$i])
-                . ' RENAME ' . Util::backquote($newTableName);
-
-            $sql_query .= $aQuery . ';' . "\n";
-            $this->dbi->selectDb($db);
-            $this->dbi->query($aQuery);
-        }
-
-        $message = Message::success();
-
-        if (empty($_POST['message'])) {
-            $_POST['message'] = $message;
-        }
-
-        $this->index();
-    }
-
-    public function copyTableWithPrefix(): void
-    {
-        global $db, $message;
-
-        $selected = $_POST['selected'] ?? [];
-        $fromPrefix = $_POST['from_prefix'] ?? null;
-        $toPrefix = $_POST['to_prefix'] ?? null;
-
-        $selectedCount = count($selected);
-
-        for ($i = 0; $i < $selectedCount; $i++) {
-            $current = $selected[$i];
-            $newTableName = $toPrefix . mb_substr($current, mb_strlen((string) $fromPrefix));
-
-            Table::moveCopy(
-                $db,
-                $current,
-                $db,
-                $newTableName,
-                'data',
-                false,
-                'one_table'
-            );
-        }
-
-        $message = Message::success();
-
-        if (empty($_POST['message'])) {
-            $_POST['message'] = $message;
-        }
-
-        $this->index();
+        return [
+            $currentTable,
+            $formattedSize,
+            $unit,
+            $sumSize,
+        ];
     }
 }

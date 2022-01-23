@@ -9,7 +9,7 @@ namespace PhpMyAdmin\Plugins\Transformations\Output;
 
 use PhpMyAdmin\FieldMetadata;
 use PhpMyAdmin\Plugins\TransformationsPlugin;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 
 use function __;
 use function htmlspecialchars;
@@ -17,7 +17,6 @@ use function htmlspecialchars;
 /**
  * Handles the json transformation for text plain
  */
-// @codingStandardsIgnoreLine
 class Text_Plain_Json extends TransformationsPlugin
 {
     public function __construct()
@@ -26,7 +25,7 @@ class Text_Plain_Json extends TransformationsPlugin
             return;
         }
 
-        $response = Response::getInstance();
+        $response = ResponseRenderer::getInstance();
         $scripts = $response->getHeader()
             ->getScripts();
         $scripts->addFile('vendor/codemirror/lib/codemirror.js');
@@ -42,9 +41,7 @@ class Text_Plain_Json extends TransformationsPlugin
      */
     public static function getInfo()
     {
-        return __(
-            'Formats text as JSON with syntax highlighting.'
-        );
+        return __('Formats text as JSON with syntax highlighting.');
     }
 
     /**

@@ -9,7 +9,7 @@ use PhpMyAdmin\Charsets\Charset;
 use PhpMyAdmin\Charsets\Collation;
 use PhpMyAdmin\Controllers\AbstractController;
 use PhpMyAdmin\DatabaseInterface;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 
@@ -18,25 +18,23 @@ use PhpMyAdmin\Url;
  */
 class CollationsController extends AbstractController
 {
-    /** @var array|null */
+    /** @var array<string, Charset> */
     private $charsets;
 
-    /** @var array|null */
+    /** @var array<string, array<string, Collation>> */
     private $collations;
 
     /** @var DatabaseInterface */
     private $dbi;
 
     /**
-     * @param Response          $response
-     * @param DatabaseInterface $dbi
-     * @param array|null        $charsets   Array of charsets
-     * @param array|null        $collations Array of collations
+     * @param array<string, Charset>|null                  $charsets
+     * @param array<string, array<string, Collation>>|null $collations
      */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
-        $dbi,
+        DatabaseInterface $dbi,
         ?array $charsets = null,
         ?array $collations = null
     ) {
@@ -49,7 +47,7 @@ class CollationsController extends AbstractController
         $this->collations = $collations ?? Charsets::getCollations($this->dbi, $cfg['Server']['DisableIS']);
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $errorUrl;
 
@@ -60,10 +58,8 @@ class CollationsController extends AbstractController
         }
 
         $charsets = [];
-        /** @var Charset $charset */
         foreach ($this->charsets as $charset) {
             $charsetCollations = [];
-            /** @var Collation $collation */
             foreach ($this->collations[$charset->getName()] as $collation) {
                 $charsetCollations[] = [
                     'name' => $collation->getName(),

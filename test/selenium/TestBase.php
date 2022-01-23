@@ -1,7 +1,4 @@
 <?php
-/**
- * Base class for Selenium tests
- */
 
 declare(strict_types=1);
 
@@ -40,8 +37,9 @@ use function json_decode;
 use function json_encode;
 use function mb_strtolower;
 use function mb_substr;
+use function mt_getrandmax;
 use function preg_match;
-use function rand;
+use function random_int;
 use function reset;
 use function sha1;
 use function sprintf;
@@ -62,11 +60,6 @@ use const JSON_PRETTY_PRINT;
 use const JSON_UNESCAPED_SLASHES;
 use const PHP_EOL;
 
-/**
- * Base class for Selenium tests.
- *
- * @group      selenium
- */
 abstract class TestBase extends TestCase
 {
     /** @var RemoteWebDriver */
@@ -75,7 +68,6 @@ abstract class TestBase extends TestCase
     /**
      * Name of database for the test
      *
-     * @access public
      * @var string
      */
     public $databaseName;
@@ -144,10 +136,7 @@ abstract class TestBase extends TestCase
         $this->addCapabilities($capabilities);
         $url = $this->getHubUrl();
 
-        $this->webDriver = RemoteWebDriver::create(
-            $url,
-            $capabilities
-        );
+        $this->webDriver = RemoteWebDriver::create($url, $capabilities);
 
         // The session Id is only used by BrowserStack
         if ($this->hasBrowserstackConfig()) {
@@ -170,7 +159,7 @@ abstract class TestBase extends TestCase
      */
     protected function createDatabase(): void
     {
-        $this->databaseName = $this->getDbPrefix() . mb_substr(sha1((string) rand()), 0, 7);
+        $this->databaseName = $this->getDbPrefix() . mb_substr(sha1((string) random_int(0, mt_getrandmax())), 0, 7);
         $this->dbQuery(
             'CREATE DATABASE IF NOT EXISTS `' . $this->databaseName . '`; USE `' . $this->databaseName . '`;'
         );
@@ -189,7 +178,7 @@ abstract class TestBase extends TestCase
 
     private function getBrowserStackCredentials(): string
     {
-        return getenv('TESTSUITE_BROWSERSTACK_USER') . ':' . getenv('TESTSUITE_BROWSERSTACK_KEY');
+        return (string) getenv('TESTSUITE_BROWSERSTACK_USER') . ':' . (string) getenv('TESTSUITE_BROWSERSTACK_KEY');
     }
 
     protected function getTestSuiteUserLogin(): string
@@ -257,8 +246,8 @@ abstract class TestBase extends TestCase
 
         if ($this->hasSeleniumConfig()) {
             return 'http://'
-            . getenv('TESTSUITE_SELENIUM_HOST') . ':'
-            . getenv('TESTSUITE_SELENIUM_PORT') . '/wd/hub';
+            . (string) getenv('TESTSUITE_SELENIUM_HOST') . ':'
+            . (string) getenv('TESTSUITE_SELENIUM_PORT') . '/wd/hub';
         }
 
         return '';
@@ -310,13 +299,15 @@ abstract class TestBase extends TestCase
         $buildLocal = true;
         $buildId = 'Manual';
         $projectName = 'phpMyAdmin';
+        $buildTagEnv = getenv('BUILD_TAG');
+        $githubActionEnv = getenv('GITHUB_ACTION');
 
-        if (getenv('BUILD_TAG')) {
-            $buildId = getenv('BUILD_TAG');
+        if ($buildTagEnv) {
+            $buildId = $buildTagEnv;
             $buildLocal = false;
             $projectName = 'phpMyAdmin (Jenkins)';
-        } elseif (getenv('GITHUB_ACTION')) {
-            $buildId = 'github-' . getenv('GITHUB_ACTION');
+        } elseif ($githubActionEnv) {
+            $buildId = 'github-' . $githubActionEnv;
             $buildLocal = true;
             $projectName = 'phpMyAdmin (GitHub - Actions)';
         }
@@ -354,10 +345,7 @@ abstract class TestBase extends TestCase
                 $capabilities = DesiredCapabilities::chrome();
                 $chromeOptions = new ChromeOptions();
                 $chromeOptions->addArguments(['--lang=en']);
-                $capabilities->setCapability(
-                    ChromeOptions::CAPABILITY_W3C,
-                    $chromeOptions
-                );
+                $capabilities->setCapability(ChromeOptions::CAPABILITY_W3C, $chromeOptions);
                 $capabilities->setCapability(
                     'loggingPrefs',
                     ['browser' => 'ALL']
@@ -376,10 +364,7 @@ abstract class TestBase extends TestCase
                         'browser_version',
                         '80.0' // Force chrome 80.0
                     );
-                    $capabilities->setCapability(
-                        'resolution',
-                        '1920x1080'
-                    );
+                    $capabilities->setCapability('resolution', '1920x1080');
                 }
 
                 return $capabilities;
@@ -469,19 +454,12 @@ abstract class TestBase extends TestCase
     {
         $this->navigateTo('index.php?route=/check-relations');
         $pageContent = $this->waitForElement('id', 'page_content');
-        if (
-            ! preg_match(
-                '/Configuration of pmadb… not OK/i',
-                $pageContent->getText()
-            )
-        ) {
+        if (! preg_match('/Configuration of pmadb… not OK/i', $pageContent->getText())) {
             return;
         }
 
         if (! $this->fixUpPhpMyAdminStorage()) {
-            $this->markTestSkipped(
-                'The phpMyAdmin configuration storage is not working.'
-            );
+            $this->markTestSkipped('The phpMyAdmin configuration storage is not working.');
         }
 
         // If it failed the code already has exited with markTestSkipped
@@ -507,11 +485,7 @@ abstract class TestBase extends TestCase
 
         $this->navigateTo('');
         /* Wait while page */
-        while (
-            $this->webDriver->executeScript(
-                'return document.readyState !== "complete";'
-            )
-        ) {
+        while ($this->webDriver->executeScript('return document.readyState !== "complete";')) {
             usleep(5000);
         }
 
@@ -536,7 +510,7 @@ abstract class TestBase extends TestCase
      *
      * @param string $id The element ID
      */
-    public function byId(string $id): WebDriverElement
+    public function byId(string $id): RemoteWebElement
     {
         return $this->webDriver->findElement(WebDriverBy::id($id));
     }
@@ -546,7 +520,7 @@ abstract class TestBase extends TestCase
      *
      * @param string $selector The element css selector
      */
-    public function byCssSelector(string $selector): WebDriverElement
+    public function byCssSelector(string $selector): RemoteWebElement
     {
         return $this->webDriver->findElement(WebDriverBy::cssSelector($selector));
     }
@@ -556,7 +530,7 @@ abstract class TestBase extends TestCase
      *
      * @param string $xpath The xpath
      */
-    public function byXPath(string $xpath): WebDriverElement
+    public function byXPath(string $xpath): RemoteWebElement
     {
         return $this->webDriver->findElement(WebDriverBy::xpath($xpath));
     }
@@ -566,7 +540,7 @@ abstract class TestBase extends TestCase
      *
      * @param string $linkText The link text
      */
-    public function byLinkText(string $linkText): WebDriverElement
+    public function byLinkText(string $linkText): RemoteWebElement
     {
         return $this->webDriver->findElement(WebDriverBy::linkText($linkText));
     }
@@ -592,7 +566,7 @@ abstract class TestBase extends TestCase
      *
      * @param string $partialLinkText The partial link text
      */
-    public function byPartialLinkText(string $partialLinkText): WebDriverElement
+    public function byPartialLinkText(string $partialLinkText): RemoteWebElement
     {
         return $this->webDriver->findElement(WebDriverBy::partialLinkText($partialLinkText));
     }
@@ -610,7 +584,7 @@ abstract class TestBase extends TestCase
      *
      * @param string $name The name
      */
-    public function byName(string $name): WebDriverElement
+    public function byName(string $name): RemoteWebElement
     {
         return $this->webDriver->findElement(WebDriverBy::name($name));
     }
@@ -697,8 +671,6 @@ abstract class TestBase extends TestCase
             }
         }
 
-        // echo PHP_EOL . 'Query: ' . $query . ', out: ' . (($didSucceed) ? 'yes' : 'no') . PHP_EOL;
-
         reset($handles);
         $lastWindow = current($handles);
         $this->webDriver->switchTo()->window($lastWindow);
@@ -736,15 +708,10 @@ abstract class TestBase extends TestCase
 
     /**
      * Check if user is logged in to phpmyadmin
-     *
-     * @return bool Where or not user is logged in
      */
     public function isLoggedIn(): bool
     {
-        return $this->isElementPresent(
-            'xpath',
-            '//*[@class="navigationbar"]'
-        );
+        return $this->isElementPresent('xpath', '//*[@class="navigationbar"]');
     }
 
     /**
@@ -764,10 +731,8 @@ abstract class TestBase extends TestCase
      *
      * @param string $func Locate using - cssSelector, xpath, tagName, partialLinkText, linkText, name, id, className
      * @param string $arg  Selector
-     *
-     * @return WebDriverElement Element waited for
      */
-    public function waitForElement(string $func, string $arg): WebDriverElement
+    public function waitForElement(string $func, string $arg): RemoteWebElement
     {
         return $this->webDriver->wait(30, 500)->until(
             WebDriverExpectedCondition::presenceOfElementLocated(WebDriverBy::$func($arg))
@@ -781,7 +746,7 @@ abstract class TestBase extends TestCase
      * @param string $arg     Selector
      * @param int    $timeout Timeout in seconds
      */
-    public function waitUntilElementIsPresent(string $func, string $arg, int $timeout): WebDriverElement
+    public function waitUntilElementIsPresent(string $func, string $arg, int $timeout): RemoteWebElement
     {
         return $this->webDriver->wait($timeout, 500)->until(
             WebDriverExpectedCondition::presenceOfElementLocated(WebDriverBy::$func($arg))
@@ -824,20 +789,12 @@ abstract class TestBase extends TestCase
      *
      * @param string $func Locate using - cssSelector, xpath, tagName, partialLinkText, linkText, name, id, className
      * @param string $arg  Selector
-     *
-     * @return bool Whether or not the element is present
      */
     public function isElementPresent(string $func, string $arg): bool
     {
         try {
             $this->webDriver->findElement(WebDriverBy::$func($arg));
-        } catch (NoSuchElementException $e) {
-            // Element not present
-            return false;
-        } catch (InvalidArgumentException $e) {
-            // Element not present
-            return false;
-        } catch (InvalidSelectorException $e) {
+        } catch (NoSuchElementException | InvalidArgumentException | InvalidSelectorException $e) {
             // Element not present
             return false;
         }
@@ -857,15 +814,8 @@ abstract class TestBase extends TestCase
      */
     public function getCellByTableId(string $tableID, int $row, int $column): string
     {
-        $sel = sprintf(
-            'table#%s tbody tr:nth-child(%d) td:nth-child(%d)',
-            $tableID,
-            $row,
-            $column
-        );
-        $element = $this->byCssSelector(
-            $sel
-        );
+        $sel = sprintf('table#%s tbody tr:nth-child(%d) td:nth-child(%d)', $tableID, $row, $column);
+        $element = $this->byCssSelector($sel);
         $text = $element->getText();
 
         return $text && is_string($text) ? trim($text) : '';
@@ -882,15 +832,8 @@ abstract class TestBase extends TestCase
      */
     public function getCellByTableClass(string $tableClass, int $row, int $column): string
     {
-        $sel = sprintf(
-            'table.%s tbody tr:nth-child(%d) td:nth-child(%d)',
-            $tableClass,
-            $row,
-            $column
-        );
-        $element = $this->byCssSelector(
-            $sel
-        );
+        $sel = sprintf('table.%s tbody tr:nth-child(%d) td:nth-child(%d)', $tableClass, $row, $column);
+        $element = $this->byCssSelector($sel);
         $text = $element->getText();
 
         return $text && is_string($text) ? trim($text) : '';
@@ -992,11 +935,7 @@ abstract class TestBase extends TestCase
             $ele->click();
             $this->waitForElement('cssSelector', 'li.dropdown.show > a');
 
-            $this->waitUntilElementIsPresent(
-                'cssSelector',
-                'li.nav-item.dropdown.show > ul',
-                5000
-            );
+            $this->waitUntilElementIsPresent('cssSelector', 'li.nav-item.dropdown.show > ul', 5000);
         } catch (WebDriverException $e) {
             return;
         }
@@ -1013,16 +952,10 @@ abstract class TestBase extends TestCase
         $this->navigateDatabase($this->databaseName, $gotoHomepageRequired);
 
         // go to table page
-        $this->waitForElement(
-            'xpath',
-            "//th//a[contains(., '" . $table . "')]"
-        )->click();
+        $this->waitForElement('xpath', "//th//a[contains(., '" . $table . "')]")->click();
         $this->waitAjax();
 
-        $this->waitForElement(
-            'xpath',
-            "//a[@class='nav-link text-nowrap' and contains(., 'Browse')]"
-        );
+        $this->waitForElement('xpath', "//a[@class='nav-link text-nowrap' and contains(., 'Browse')]");
     }
 
     /**
@@ -1049,10 +982,7 @@ abstract class TestBase extends TestCase
         $this->waitAjax();
 
         // Wait for it to load
-        $this->waitForElement(
-            'xpath',
-            "//a[@class='nav-link text-nowrap' and contains(., 'Structure')]"
-        );
+        $this->waitForElement('xpath', "//a[@class='nav-link text-nowrap' and contains(., 'Structure')]");
     }
 
     /**
@@ -1082,17 +1012,19 @@ abstract class TestBase extends TestCase
     /**
      * Scrolls to a coordinate such that the element with given id is visible
      *
-     * @param string $element_id Id of the element
-     * @param int    $y_offset   Offset from Y-coordinate of element
+     * @param string $elementId Id of the element
+     * @param int    $yOffset   Offset from Y-coordinate of element
      */
-    public function scrollIntoView(string $element_id, int $y_offset = 70): void
+    public function scrollIntoView(string $elementId, int $yOffset = 70): void
     {
         // 70pt offset by-default so that the topmenu does not cover the element
-        $this->webDriver->executeScript(
-            'var position = document.getElementById("'
-            . $element_id . '").getBoundingClientRect();'
-            . 'window.scrollBy(0, position.top-(' . $y_offset . '));'
-        );
+        $script = <<<'JS'
+const elementId = arguments[0];
+const yOffset = arguments[1];
+const position = document.getElementById(elementId).getBoundingClientRect();
+window.scrollBy({left: 0, top: position.top - yOffset, behavior: 'instant'});
+JS;
+        $this->webDriver->executeScript($script, [$elementId, $yOffset]);
     }
 
     /**
@@ -1104,10 +1036,15 @@ abstract class TestBase extends TestCase
      */
     public function scrollToElement(WebDriverElement $element, int $xOffset = 0, int $yOffset = 0): void
     {
-        $this->webDriver->executeScript(
-            'window.scrollBy(' . ($element->getLocation()->getX() + $xOffset)
-            . ', ' . ($element->getLocation()->getY() + $yOffset) . ');'
-        );
+        $script = <<<'JS'
+const leftValue = arguments[0];
+const topValue = arguments[1];
+window.scrollBy({left: leftValue, top: topValue, behavior: 'instant'});
+JS;
+        $this->webDriver->executeScript($script, [
+            $element->getLocation()->getX() + $xOffset,
+            $element->getLocation()->getY() + $yOffset,
+        ]);
     }
 
     /**
@@ -1115,9 +1052,10 @@ abstract class TestBase extends TestCase
      */
     public function scrollToBottom(): void
     {
-        $this->webDriver->executeScript(
-            'window.scrollTo(0,document.body.scrollHeight);'
-        );
+        $script = <<<'JS'
+window.scrollTo({left: 0, top: document.body.scrollHeight, behavior: 'instant'});
+JS;
+        $this->webDriver->executeScript($script);
     }
 
     /**
@@ -1125,9 +1063,7 @@ abstract class TestBase extends TestCase
      */
     public function reloadPage(): void
     {
-        $this->webDriver->executeScript(
-            'window.location.reload();'
-        );
+        $this->webDriver->executeScript('window.location.reload();');
     }
 
     /**
@@ -1155,14 +1091,9 @@ abstract class TestBase extends TestCase
     public function waitAjaxMessage(): void
     {
         /* Get current message count */
-        $ajax_message_count = $this->webDriver->executeScript(
-            'return ajaxMessageCount;'
-        );
+        $ajax_message_count = $this->webDriver->executeScript('return ajaxMessageCount;');
         /* Ensure the popup is gone */
-        $this->waitForElementNotPresent(
-            'id',
-            'ajax_message_num_' . $ajax_message_count
-        );
+        $this->waitForElementNotPresent('id', 'ajax_message_num_' . $ajax_message_count);
     }
 
     /**
@@ -1206,13 +1137,8 @@ abstract class TestBase extends TestCase
                 'reason' => $message,
             ]
         );
-        /** @var resource $ch */
         $ch = curl_init();
-        curl_setopt(
-            $ch,
-            CURLOPT_URL,
-            self::SESSION_REST_URL . $this->sessionId . '.json'
-        );
+        curl_setopt($ch, CURLOPT_URL, self::SESSION_REST_URL . $this->sessionId . '.json');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
         curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
@@ -1227,7 +1153,7 @@ abstract class TestBase extends TestCase
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 
         curl_exec($ch);
-        if ($ch !== false && curl_errno($ch)) {
+        if (curl_errno($ch)) {
             echo 'Error: ' . curl_error($ch) . PHP_EOL;
         }
 
@@ -1240,13 +1166,8 @@ abstract class TestBase extends TestCase
             return;
         }
 
-        /** @var resource $ch */
         $ch = curl_init();
-        curl_setopt(
-            $ch,
-            CURLOPT_URL,
-            self::SESSION_REST_URL . $this->sessionId . '.json'
-        );
+        curl_setopt($ch, CURLOPT_URL, self::SESSION_REST_URL . $this->sessionId . '.json');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
         curl_setopt(
             $ch,
@@ -1261,11 +1182,13 @@ abstract class TestBase extends TestCase
         }
 
         $proj = json_decode($result);
+        // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
         if (isset($proj->automation_session)) {
+            // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
             echo 'Test failed, get more information here: ' . $proj->automation_session->public_url . PHP_EOL;
         }
 
-        if ($ch !== false && curl_errno($ch)) {
+        if (curl_errno($ch)) {
             echo 'Error: ' . curl_error($ch) . PHP_EOL;
         }
 

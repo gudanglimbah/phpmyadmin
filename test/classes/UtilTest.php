@@ -8,7 +8,7 @@ use PhpMyAdmin\Core;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\FieldMetadata;
 use PhpMyAdmin\MoTranslator\Loader;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\SqlParser\Context;
 use PhpMyAdmin\SqlParser\Token;
 use PhpMyAdmin\Util;
@@ -53,7 +53,6 @@ class UtilTest extends AbstractTestCase
         parent::setUp();
         parent::setLanguage();
         parent::setTheme();
-        parent::loadDefaultConfig();
     }
 
     /**
@@ -80,10 +79,10 @@ class UtilTest extends AbstractTestCase
         $GLOBALS['db'] = 'db';
         $GLOBALS['cfg']['Server']['DisableIS'] = false;
 
-        $actual = Util::getUniqueCondition(0, 0, [], []);
+        $actual = Util::getUniqueCondition(0, [], []);
         $this->assertEquals(['', false, []], $actual);
 
-        $actual = Util::getUniqueCondition(0, 0, [], [], true);
+        $actual = Util::getUniqueCondition(0, [], [], true);
         $this->assertEquals(['', true, []], $actual);
     }
 
@@ -164,7 +163,7 @@ class UtilTest extends AbstractTestCase
             ]),
         ];
 
-        $actual = Util::getUniqueCondition(0, count($meta), $meta, [
+        $actual = Util::getUniqueCondition(count($meta), $meta, [
             null,
             'value\'s',
             123456,
@@ -215,7 +214,7 @@ class UtilTest extends AbstractTestCase
             ]),
         ];
 
-        $actual = Util::getUniqueCondition(0, 1, $meta, [str_repeat('*', 1001)]);
+        $actual = Util::getUniqueCondition(1, $meta, [str_repeat('*', 1001)]);
         $this->assertEquals(
             ['CHAR_LENGTH(`table`.`field`)  = 1001', false, ['`table`.`field`' => ' = 1001']],
             $actual
@@ -237,7 +236,7 @@ class UtilTest extends AbstractTestCase
             ]),
         ];
 
-        $actual = Util::getUniqueCondition(0, count($meta), $meta, [1, 'value']);
+        $actual = Util::getUniqueCondition(count($meta), $meta, [1, 'value']);
         $this->assertEquals(['`table`.`id` = 1', true, ['`table`.`id`' => '= 1']], $actual);
     }
 
@@ -256,7 +255,7 @@ class UtilTest extends AbstractTestCase
             ]),
         ];
 
-        $actual = Util::getUniqueCondition(0, count($meta), $meta, ['unique', 'value']);
+        $actual = Util::getUniqueCondition(count($meta), $meta, ['unique', 'value']);
         $this->assertEquals(['`table`.`id` = \'unique\'', true, ['`table`.`id`' => '= \'unique\'']], $actual);
     }
 
@@ -329,16 +328,10 @@ class UtilTest extends AbstractTestCase
     {
         $GLOBALS['server'] = 'server';
         SessionCache::set('is_superuser', 'yes');
-        $this->assertEquals(
-            'yes',
-            $_SESSION['cache']['server_server']['is_superuser']
-        );
+        $this->assertEquals('yes', $_SESSION['cache']['server_server']['is_superuser']);
 
         Util::clearUserCache();
-        $this->assertArrayNotHasKey(
-            'is_superuser',
-            $_SESSION['cache']['server_server']
-        );
+        $this->assertArrayNotHasKey('is_superuser', $_SESSION['cache']['server_server']);
     }
 
     public function testCheckParameterMissing(): void
@@ -352,7 +345,7 @@ class UtilTest extends AbstractTestCase
         $GLOBALS['server'] = 1;
         $GLOBALS['cfg']['ServerDefault'] = 1;
         $GLOBALS['cfg']['AllowThirdPartyFraming'] = false;
-        Response::getInstance()->setAjax(false);
+        ResponseRenderer::getInstance()->setAjax(false);
 
         $this->expectOutputRegex('/Missing parameter: field/');
 
@@ -532,7 +525,6 @@ class UtilTest extends AbstractTestCase
     public function testExpandUserString(string $in, string $out): void
     {
         parent::setGlobalConfig();
-        $GLOBALS['config']->enableBc();
         $GLOBALS['cfg'] = [
             'Server' => [
                 'host' => 'host&',
@@ -889,6 +881,51 @@ class UtilTest extends AbstractTestCase
                 ],
             ],
             [
+                '102400K',
+                3,
+                3,
+                [
+                    '100.000',
+                    __('KiB'),
+                ],
+            ],
+            [
+                '102401K',
+                3,
+                3,
+                [
+                    '100.001',
+                    __('KiB'),
+                ],
+            ],
+            [
+                '153600K',
+                3,
+                3,
+                [
+                    '150.000',
+                    __('KiB'),
+                ],
+            ],
+            [
+                '153600K',
+                3,
+                0,
+                [
+                    '150',
+                    __('KiB'),
+                ],
+            ],
+            [
+                102400 * 1024,
+                3,
+                0,
+                [
+                    '100',
+                    __('MiB'),
+                ],
+            ],
+            [
                 2206451,
                 1,
                 2,
@@ -1179,6 +1216,23 @@ class UtilTest extends AbstractTestCase
                 21474836480,
                 __('GiB'),
                 '20',
+            ],
+            [
+                '153600K',
+                __('KiB'),
+                '150',
+            ],
+            [
+                '157286400',
+                __('MiB'),
+                '150',
+            ],
+            [
+                // Equals to Core::getRealSize of '102400K'
+                // according to PHP FAQ on "shorthandbytes"
+                102400 * 1024,
+                __('MiB'),
+                '100',
             ],
         ];
     }
@@ -1539,90 +1593,21 @@ class UtilTest extends AbstractTestCase
     }
 
     /**
-     * backquote test with different param $do_it (true, false)
-     *
-     * @param string|array $a String
-     * @param string|array $b Expected output
-     *
-     * @dataProvider providerBackquote
+     * @dataProvider providerForTestBackquote
      */
-    public function testBackquote($a, $b): void
+    public function testBackquote(?string $entry, string $expectedNoneOutput, string $expectedMssqlOutput): void
     {
-        // Test bypass quoting (used by dump functions)
-        $this->assertEquals($a, Util::backquote($a, false));
-
-        // Test backquote
-        $this->assertEquals($b, Util::backquote($a));
-    }
-
-    /**
-     * data provider for backquote test
-     *
-     * @return array
-     */
-    public function providerBackquote(): array
-    {
-        return [
-            [
-                '0',
-                '`0`',
-            ],
-            [
-                'test',
-                '`test`',
-            ],
-            [
-                'te`st',
-                '`te``st`',
-            ],
-            [
-                [
-                    'test',
-                    'te`st',
-                    '',
-                    '*',
-                ],
-                [
-                    '`test`',
-                    '`te``st`',
-                    '',
-                    '*',
-                ],
-            ],
-        ];
-    }
-
-    /**
-     * backquoteCompat test with different param $compatibility (NONE, MSSQL)
-     *
-     * @param string|array $entry               String
-     * @param string|array $expectedNoneOutput  Expected none output
-     * @param string|array $expectedMssqlOutput Expected MSSQL output
-     *
-     * @dataProvider providerBackquoteCompat
-     */
-    public function testBackquoteCompat($entry, $expectedNoneOutput, $expectedMssqlOutput): void
-    {
-        // Test bypass quoting (used by dump functions)
+        $this->assertSame($expectedNoneOutput, Util::backquote($entry));
         $this->assertEquals($entry, Util::backquoteCompat($entry, 'NONE', false));
-
-        // Run tests in MSSQL compatibility mode
-        // Test bypass quoting (used by dump functions)
         $this->assertEquals($entry, Util::backquoteCompat($entry, 'MSSQL', false));
-
-        // Test backquote
-        $this->assertEquals($expectedNoneOutput, Util::backquoteCompat($entry, 'NONE'));
-
-        // Test backquote
-        $this->assertEquals($expectedMssqlOutput, Util::backquoteCompat($entry, 'MSSQL'));
+        $this->assertSame($expectedNoneOutput, Util::backquoteCompat($entry, 'NONE'));
+        $this->assertSame($expectedMssqlOutput, Util::backquoteCompat($entry, 'MSSQL'));
     }
 
     /**
-     * data provider for backquoteCompat test
-     *
-     * @return array
+     * @return array<int|string, string|null>[]
      */
-    public function providerBackquoteCompat(): array
+    public function providerForTestBackquote(): array
     {
         return [
             [
@@ -1641,24 +1626,24 @@ class UtilTest extends AbstractTestCase
                 '"te`st"',
             ],
             [
-                [
-                    'test',
-                    'te`st',
-                    '',
-                    '*',
-                ],
-                [
-                    '`test`',
-                    '`te``st`',
-                    '',
-                    '*',
-                ],
-                [
-                    '"test"',
-                    '"te`st"',
-                    '',
-                    '*',
-                ],
+                'te"st',
+                '`te"st`',
+                '"te\"st"',
+            ],
+            [
+                '',
+                '',
+                '',
+            ],
+            [
+                '*',
+                '*',
+                '*',
+            ],
+            [
+                null,
+                '',
+                '',
             ],
         ];
     }
@@ -1672,12 +1657,12 @@ class UtilTest extends AbstractTestCase
             if ($type & Token::FLAG_KEYWORD_RESERVED) {
                 $this->assertEquals(
                     '`' . $keyword . '`',
-                    Util::backquote($keyword, false)
+                    Util::backquoteCompat($keyword, 'NONE', false)
                 );
             } else {
                 $this->assertEquals(
                     $keyword,
-                    Util::backquote($keyword, false)
+                    Util::backquoteCompat($keyword, 'NONE', false)
                 );
             }
         }
@@ -2020,10 +2005,7 @@ class UtilTest extends AbstractTestCase
                 . " AND 'my_data_base' LIKE `TABLE_SCHEMA`",
                 ]
             )
-            ->willReturnOnConsecutiveCalls(
-                false,
-                'EVENT'
-            );
+            ->willReturnOnConsecutiveCalls(false, 'EVENT');
 
         $oldDbi = $GLOBALS['dbi'];
         $GLOBALS['dbi'] = $dbi;
@@ -2054,10 +2036,7 @@ class UtilTest extends AbstractTestCase
                 . " AND 'my_data_base' LIKE `TABLE_SCHEMA`",
                 ]
             )
-            ->willReturnOnConsecutiveCalls(
-                false,
-                false
-            );
+            ->willReturnOnConsecutiveCalls(false, false);
 
         $oldDbi = $GLOBALS['dbi'];
         $GLOBALS['dbi'] = $dbi;
@@ -2093,11 +2072,7 @@ class UtilTest extends AbstractTestCase
                 . " AND 'my_data_base' LIKE `TABLE_SCHEMA` AND TABLE_NAME='my_data_table'",
                 ]
             )
-            ->willReturnOnConsecutiveCalls(
-                false,
-                false,
-                'EVENT'
-            );
+            ->willReturnOnConsecutiveCalls(false, false, 'EVENT');
 
         $oldDbi = $GLOBALS['dbi'];
         $GLOBALS['dbi'] = $dbi;
@@ -2133,11 +2108,7 @@ class UtilTest extends AbstractTestCase
                 . " AND 'my_data_base' LIKE `TABLE_SCHEMA` AND TABLE_NAME='my_data_table'",
                 ]
             )
-            ->willReturnOnConsecutiveCalls(
-                false,
-                false,
-                false
-            );
+            ->willReturnOnConsecutiveCalls(false, false, false);
 
         $oldDbi = $GLOBALS['dbi'];
         $GLOBALS['dbi'] = $dbi;

@@ -35,7 +35,7 @@ final class Gis
             $spatialSrid = 'ST_SRID';
         }
 
-        if ($mysqlVersionInt >= 80010 && ! $dbi->isMariaDb()) {
+        if ($mysqlVersionInt >= 80001 && ! $dbi->isMariaDb()) {
             $axisOrder = ', \'axis-order=long-lat\'';
         }
 
@@ -44,18 +44,18 @@ final class Gis
             $wktsql .= ', ' . $spatialSrid . "(x'" . $hex . "')";
         }
 
-        $wktresult = $dbi->tryQuery(
-            $wktsql
-        );
-        $wktarr = $dbi->fetchRow($wktresult, 0);
+        $wktresult = $dbi->tryQuery($wktsql);
+        $wktarr = [];
+        if ($wktresult) {
+            $wktarr = $wktresult->fetchRow();
+        }
+
         $wktval = $wktarr[0] ?? '';
 
         if ($includeSRID) {
             $srid = $wktarr[1] ?? null;
             $wktval = "'" . $wktval . "'," . $srid;
         }
-
-        @$dbi->freeResult($wktresult);
 
         return $wktval;
     }
@@ -98,8 +98,7 @@ final class Gis
     {
         $geomFromText = $mysqlVersion >= 50600 ? 'ST_GeomFromText' : 'GeomFromText';
         $gisString = trim($gisString);
-        $geomTypes = '(POINT|MULTIPOINT|LINESTRING|MULTILINESTRING|'
-            . 'POLYGON|MULTIPOLYGON|GEOMETRYCOLLECTION)';
+        $geomTypes = '(POINT|MULTIPOINT|LINESTRING|MULTILINESTRING|POLYGON|MULTIPOLYGON|GEOMETRYCOLLECTION)';
         if (preg_match("/^'" . $geomTypes . "\(.*\)',[0-9]*$/i", $gisString)) {
             return $geomFromText . '(' . $gisString . ')';
         }

@@ -26,18 +26,15 @@ use function stripslashes;
  */
 class ExportYaml extends ExportPlugin
 {
-    public function __construct()
+    /**
+     * @psalm-return non-empty-lowercase-string
+     */
+    public function getName(): string
     {
-        parent::__construct();
-        $this->setProperties();
+        return 'yaml';
     }
 
-    /**
-     * Sets the export YAML properties
-     *
-     * @return void
-     */
-    protected function setProperties()
+    protected function setProperties(): ExportPluginProperties
     {
         $exportPluginProperties = new ExportPluginProperties();
         $exportPluginProperties->setText('YAML');
@@ -49,9 +46,7 @@ class ExportYaml extends ExportPlugin
         // create the root group that will be the options field for
         // $exportPluginProperties
         // this will be shown as "Format specific options"
-        $exportSpecificOptions = new OptionsPropertyRootGroup(
-            'Format Specific Options'
-        );
+        $exportSpecificOptions = new OptionsPropertyRootGroup('Format Specific Options');
 
         // general options main group
         $generalOptions = new OptionsPropertyMainGroup('general_opts');
@@ -63,29 +58,24 @@ class ExportYaml extends ExportPlugin
 
         // set the options for the export plugin property item
         $exportPluginProperties->setOptions($exportSpecificOptions);
-        $this->properties = $exportPluginProperties;
+
+        return $exportPluginProperties;
     }
 
     /**
      * Outputs export header
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportHeader()
+    public function exportHeader(): bool
     {
-        $this->export->outputHandler(
-            '%YAML 1.1' . $GLOBALS['crlf'] . '---' . $GLOBALS['crlf']
-        );
+        $this->export->outputHandler('%YAML 1.1' . $GLOBALS['crlf'] . '---' . $GLOBALS['crlf']);
 
         return true;
     }
 
     /**
      * Outputs export footer
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportFooter()
+    public function exportFooter(): bool
     {
         $this->export->outputHandler('...' . $GLOBALS['crlf']);
 
@@ -97,10 +87,8 @@ class ExportYaml extends ExportPlugin
      *
      * @param string $db      Database name
      * @param string $dbAlias Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBHeader($db, $dbAlias = '')
+    public function exportDBHeader($db, $dbAlias = ''): bool
     {
         return true;
     }
@@ -109,10 +97,8 @@ class ExportYaml extends ExportPlugin
      * Outputs database footer
      *
      * @param string $db Database name
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBFooter($db)
+    public function exportDBFooter($db): bool
     {
         return true;
     }
@@ -123,10 +109,8 @@ class ExportYaml extends ExportPlugin
      * @param string $db         Database name
      * @param string $exportType 'server', 'database', 'table'
      * @param string $dbAlias    Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBCreate($db, $exportType, $dbAlias = '')
+    public function exportDBCreate($db, $exportType, $dbAlias = ''): bool
     {
         return true;
     }
@@ -140,8 +124,6 @@ class ExportYaml extends ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery SQL query for obtaining data
      * @param array  $aliases  Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     public function exportData(
         $db,
@@ -150,24 +132,20 @@ class ExportYaml extends ExportPlugin
         $errorUrl,
         $sqlQuery,
         array $aliases = []
-    ) {
+    ): bool {
         global $dbi;
 
         $db_alias = $db;
         $table_alias = $table;
         $this->initAlias($aliases, $db_alias, $table_alias);
-        $result = $dbi->query(
-            $sqlQuery,
-            DatabaseInterface::CONNECT_USER,
-            DatabaseInterface::QUERY_UNBUFFERED
-        );
+        $result = $dbi->query($sqlQuery, DatabaseInterface::CONNECT_USER, DatabaseInterface::QUERY_UNBUFFERED);
 
-        $columns_cnt = $dbi->numFields($result);
-        $fieldsMeta = $dbi->getFieldsMeta($result) ?? [];
+        $columns_cnt = $result->numFields();
+        $fieldsMeta = $dbi->getFieldsMeta($result);
 
         $columns = [];
-        for ($i = 0; $i < $columns_cnt; $i++) {
-            $col_as = $dbi->fieldName($result, $i);
+        foreach ($fieldsMeta as $i => $field) {
+            $col_as = $field->name;
             if (! empty($aliases[$db]['tables'][$table]['columns'][$col_as])) {
                 $col_as = $aliases[$db]['tables'][$table]['columns'][$col_as];
             }
@@ -175,9 +153,8 @@ class ExportYaml extends ExportPlugin
             $columns[$i] = stripslashes($col_as);
         }
 
-        $buffer = '';
         $record_cnt = 0;
-        while ($record = $dbi->fetchRow($result)) {
+        while ($record = $result->fetchRow()) {
             $record_cnt++;
 
             // Output table name as comment if this is the first record of the table
@@ -227,8 +204,6 @@ class ExportYaml extends ExportPlugin
             }
         }
 
-        $dbi->freeResult($result);
-
         return true;
     }
 
@@ -238,8 +213,6 @@ class ExportYaml extends ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery the rawquery to output
      * @param string $crlf     the end of line sequence
-     *
-     * @return bool if succeeded
      */
     public function exportRawQuery(string $errorUrl, string $sqlQuery, string $crlf): bool
     {

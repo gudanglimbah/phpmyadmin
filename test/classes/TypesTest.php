@@ -231,8 +231,7 @@ class TypesTest extends AbstractTestCase
                 'enum',
                 false,
                 '=',
-                '<option value="=" selected="selected">=</option>'
-                . '<option value="!=">!=</option>',
+                '<option value="=" selected="selected">=</option><option value="!=">!=</option>',
             ],
         ];
     }
@@ -608,6 +607,22 @@ class TypesTest extends AbstractTestCase
                 'SOUNDEX',
                 'SPACE',
                 'SQRT',
+                'ST_GeomCollFromText',
+                'ST_GeomCollFromWKB',
+                'ST_GeomFromText',
+                'ST_GeomFromWKB',
+                'ST_LineFromText',
+                'ST_LineFromWKB',
+                'ST_MLineFromText',
+                'ST_MLineFromWKB',
+                'ST_MPointFromText',
+                'ST_MPointFromWKB',
+                'ST_MPolyFromText',
+                'ST_MPolyFromWKB',
+                'ST_PointFromText',
+                'ST_PointFromWKB',
+                'ST_PolyFromText',
+                'ST_PolyFromWKB',
                 'SYSDATE',
                 'TAN',
                 'TIME',
@@ -666,7 +681,7 @@ class TypesTest extends AbstractTestCase
                 1 => 'VARCHAR',
                 2 => 'TEXT',
                 3 => 'DATE',
-                'Numeric' =>  [
+                'Numeric' => [
                     'TINYINT',
                     'SMALLINT',
                     'MEDIUMINT',
@@ -682,14 +697,14 @@ class TypesTest extends AbstractTestCase
                     'BOOLEAN',
                     'SERIAL',
                 ],
-                'Date and time' =>  [
+                'Date and time' => [
                     'DATE',
                     'DATETIME',
                     'TIMESTAMP',
                     'TIME',
                     'YEAR',
                 ],
-                'String' =>  [
+                'String' => [
                     'CHAR',
                     'VARCHAR',
                     '-',
@@ -709,7 +724,7 @@ class TypesTest extends AbstractTestCase
                     'ENUM',
                     'SET',
                 ],
-                'Spatial' =>  [
+                'Spatial' => [
                     'GEOMETRY',
                     'POINT',
                     'LINESTRING',

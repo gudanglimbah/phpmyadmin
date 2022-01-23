@@ -27,7 +27,7 @@ final class ForeignKey
 
         if ($engine === 'NDBCLUSTER' || $engine === 'NDB') {
             $ndbver = strtolower(
-                $dbi->fetchValue('SELECT @@ndb_version_string')
+                $dbi->fetchValue('SELECT @@ndb_version_string') ?: ''
             );
             if (substr($ndbver, 0, 4) === 'ndb-') {
                 $ndbver = substr($ndbver, 4);
@@ -59,8 +59,6 @@ final class ForeignKey
 
     /**
      * Handle foreign key check request
-     *
-     * @return bool Default foreign key checks value
      */
     public static function handleDisableCheckInit(): bool
     {
@@ -89,9 +87,6 @@ final class ForeignKey
     {
         global $dbi;
 
-        $dbi->setVariable(
-            'FOREIGN_KEY_CHECKS',
-            $defaultCheckValue ? 'ON' : 'OFF'
-        );
+        $dbi->setVariable('FOREIGN_KEY_CHECKS', $defaultCheckValue ? 'ON' : 'OFF');
     }
 }

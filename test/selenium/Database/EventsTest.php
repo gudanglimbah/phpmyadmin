@@ -1,7 +1,4 @@
 <?php
-/**
- * Selenium TestCase for table related tests
- */
 
 declare(strict_types=1);
 
@@ -14,9 +11,7 @@ use function sleep;
 use function strtotime;
 
 /**
- * EventsTest class
- *
- * @group      selenium
+ * @coversNothing
  */
 class EventsTest extends TestBase
 {
@@ -118,12 +113,9 @@ class EventsTest extends TestBase
 
         $this->byXPath("//button[contains(., 'Go')]")->click();
 
-        sleep(1);
-
         $this->waitForElement(
             'xpath',
-            "//div[@class='alert alert-success' and contains(., "
-            . "'Event `test_event` has been created')]"
+            '//div[@class=\'alert alert-success\' and contains(., \'Event `test_event` has been created\')]'
         );
         $this->waitForElementNotPresent(
             'xpath',
@@ -174,10 +166,7 @@ class EventsTest extends TestBase
         $this->waitForElement('partialLinkText', 'Events')->click();
         $this->waitAjax();
 
-        $this->waitForElement(
-            'xpath',
-            '//div[contains(., "Event scheduler status")]'
-        );
+        $this->waitForElement('xpath', '//div[contains(., "Event scheduler status")]');
 
         $this->byPartialLinkText('Edit')->click();
 
@@ -189,8 +178,7 @@ class EventsTest extends TestBase
 
         $this->waitForElement(
             'xpath',
-            "//div[@class='alert alert-success' and contains(., "
-            . "'Event `test_event` has been modified')]"
+            '//div[@class=\'alert alert-success\' and contains(., \'Event `test_event` has been modified\')]'
         );
 
         sleep(2);
@@ -216,16 +204,10 @@ class EventsTest extends TestBase
         $this->waitForElement('partialLinkText', 'Events')->click();
         $this->waitAjax();
 
-        $this->waitForElement(
-            'xpath',
-            '//div[contains(., "Event scheduler status")]'
-        );
+        $this->waitForElement('xpath', '//div[contains(., "Event scheduler status")]');
 
         $this->byPartialLinkText('Drop')->click();
-        $this->waitForElement(
-            'className',
-            'submitOK'
-        )->click();
+        $this->waitForElement('className', 'submitOK')->click();
 
         $this->waitAjaxMessage();
 

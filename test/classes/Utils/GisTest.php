@@ -6,6 +6,7 @@ namespace PhpMyAdmin\Tests\Utils;
 
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Tests\AbstractTestCase;
+use PhpMyAdmin\Tests\Stubs\DummyResult;
 use PhpMyAdmin\Utils\Gis;
 
 use function hex2bin;
@@ -30,6 +31,8 @@ class GisTest extends AbstractTestCase
         bool $SRIDOption,
         int $mysqlVersion
     ): void {
+        $resultStub = $this->createMock(DummyResult::class);
+
         $dbi = $this->getMockBuilder(DatabaseInterface::class)
             ->disableOriginalConstructor()
             ->getMock();
@@ -41,9 +44,9 @@ class GisTest extends AbstractTestCase
         $dbi->expects($SRIDOption ? $this->once() : $this->exactly(2))
             ->method('tryQuery')
             ->with($expectedQuery)
-            ->will($this->returnValue([]));// Omit the real object
+            ->will($this->returnValue($resultStub));// Omit the real object
 
-        $dbi->expects($SRIDOption ? $this->once() : $this->exactly(2))
+        $resultStub->expects($SRIDOption ? $this->once() : $this->exactly(2))
             ->method('fetchRow')
             ->will($this->returnValue($returnData));
 
@@ -101,7 +104,7 @@ class GisTest extends AbstractTestCase
                 ['POINT(1 1)', '0'],
                 '\'POINT(1 1)\',0',
                 true,
-                80010,
+                80001,
             ],
             [
                 'SELECT ST_ASTEXT(x\'000000000101000000000000000000f03f000000000000f03f\'),'
@@ -116,7 +119,7 @@ class GisTest extends AbstractTestCase
                 ['POINT(1 1)', '0'],
                 'POINT(1 1)',
                 false,
-                80010,
+                80001,
             ],
             [
                 'SELECT ST_ASTEXT(x\'000000000101000000000000000000f03f000000000000f03f\')',

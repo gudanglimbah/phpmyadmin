@@ -7,12 +7,12 @@ namespace PhpMyAdmin\Controllers\Preferences;
 use PhpMyAdmin\Config;
 use PhpMyAdmin\Config\ConfigFile;
 use PhpMyAdmin\Config\Forms\User\UserFormList;
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\Controllers\AbstractController;
 use PhpMyAdmin\Core;
 use PhpMyAdmin\File;
 use PhpMyAdmin\Message;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\ThemeManager;
 use PhpMyAdmin\UserPreferences;
@@ -51,11 +51,8 @@ class ManageController extends AbstractController
     /** @var Config */
     private $config;
 
-    /**
-     * @param Response $response
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
         UserPreferences $userPreferences,
         Relation $relation,
@@ -67,9 +64,9 @@ class ManageController extends AbstractController
         $this->config = $config;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
-        global $cf, $error, $filename, $json, $lang, $max_upload_size;
+        global $cf, $error, $filename, $json, $lang;
         global $new_config, $return_url, $form_display, $all_ok, $params, $query, $route;
 
         $cf = new ConfigFile($this->config->baseSettings);
@@ -169,12 +166,12 @@ class ManageController extends AbstractController
 
                 if (! $all_ok) {
                     // mimic original form and post json in a hidden field
-                    $cfgRelation = $this->relation->getRelationsParam();
+                    $relationParameters = $this->relation->getRelationParameters();
 
                     echo $this->template->render('preferences/header', [
                         'route' => $route,
                         'is_saved' => ! empty($_GET['saved']),
-                        'has_config_storage' => $cfgRelation['userconfigwork'],
+                        'has_config_storage' => $relationParameters->userPreferencesFeature !== null,
                     ]);
 
                     echo $this->template->render('preferences/manage/error', [
@@ -199,10 +196,7 @@ class ManageController extends AbstractController
                     $tmanager->setThemeCookie();
                 }
 
-                if (
-                    isset($configuration['lang'])
-                    && $configuration['lang'] != $lang
-                ) {
+                if (isset($configuration['lang']) && $configuration['lang'] != $lang) {
                     $params['lang'] = $configuration['lang'];
                 }
 
@@ -253,12 +247,12 @@ class ManageController extends AbstractController
 
         $this->addScriptFiles(['config.js']);
 
-        $cfgRelation = $this->relation->getRelationsParam();
+        $relationParameters = $this->relation->getRelationParameters();
 
         echo $this->template->render('preferences/header', [
             'route' => $route,
             'is_saved' => ! empty($_GET['saved']),
-            'has_config_storage' => $cfgRelation['userconfigwork'],
+            'has_config_storage' => $relationParameters->userPreferencesFeature !== null,
         ]);
 
         if ($error) {
@@ -271,7 +265,7 @@ class ManageController extends AbstractController
 
         echo $this->template->render('preferences/manage/main', [
             'error' => $error,
-            'max_upload_size' => $max_upload_size,
+            'max_upload_size' => $GLOBALS['config']->get('max_upload_size'),
             'exists_setup_and_not_exists_config' => @file_exists(ROOT_PATH . 'setup/index.php')
                 && ! @file_exists(CONFIG_FILE),
         ]);

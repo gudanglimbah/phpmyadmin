@@ -17,7 +17,6 @@ use function htmlspecialchars;
 /**
  * Handles the IPv4/IPv6 to long transformation for text plain
  */
-// @codingStandardsIgnoreLine
 class Text_Plain_Iptolong extends IOTransformationsPlugin
 {
     /**
@@ -27,9 +26,7 @@ class Text_Plain_Iptolong extends IOTransformationsPlugin
      */
     public static function getInfo()
     {
-        return __(
-            'Converts an Internet network address in (IPv4/IPv6) format into a long integer.'
-        );
+        return __('Converts an Internet network address in (IPv4/IPv6) format into a long integer.');
     }
 
     /**

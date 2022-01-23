@@ -27,7 +27,6 @@ AJAX.registerTeardown('database/structure.js', function () {
     $(document).off('click', 'a.drop_table_anchor.ajax');
     $(document).off('click', '#real_end_input');
     $(document).off('click', 'a.favorite_table_anchor.ajax');
-    $(document).off('click', '#printView');
     $('a.real_row_count').off('click');
     $('a.row_count_sum').off('click');
     $('select[name=submit_mult]').off('change');
@@ -206,7 +205,7 @@ AJAX.registerOnload('database/structure.js', function () {
                     AJAX.source = $form;
 
                     $.post(
-                        'index.php?route=/database/structure/central-columns-make-consistent',
+                        'index.php?route=/database/structure/central-columns/make-consistent',
                         data,
                         AJAX.responseHandler
                     );
@@ -268,9 +267,9 @@ AJAX.registerOnload('database/structure.js', function () {
         if (action === 'analyze_tbl') {
             url = 'index.php?route=/table/maintenance/analyze';
         } else if (action === 'sync_unique_columns_central_list') {
-            url = 'index.php?route=/database/structure/central-columns-add';
+            url = 'index.php?route=/database/structure/central-columns/add';
         } else if (action === 'delete_unique_columns_central_list') {
-            url = 'index.php?route=/database/structure/central-columns-remove';
+            url = 'index.php?route=/database/structure/central-columns/remove';
         } else if (action === 'check_tbl') {
             url = 'index.php?route=/table/maintenance/check';
         } else if (action === 'checksum_tbl') {
@@ -398,16 +397,6 @@ AJAX.registerOnload('database/structure.js', function () {
             }); // end $.post()
         }, Functions.loadForeignKeyCheckbox);
     }); // end of Drop Table Ajax action
-
-    /**
-     * Attach Event Handler for 'Print' link
-     */
-    $(document).on('click', '#printView', function (event) {
-        event.preventDefault();
-
-        // Take to preview mode
-        Functions.printPreview();
-    }); // end of Print View action
 
     // Calculate Real End for InnoDB
     /**

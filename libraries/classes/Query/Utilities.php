@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin\Query;
 
+use PhpMyAdmin\Dbal\ResultInterface;
 use PhpMyAdmin\Error;
 use PhpMyAdmin\Url;
 
@@ -15,9 +16,9 @@ use function htmlspecialchars;
 use function intval;
 use function md5;
 use function sprintf;
+use function str_contains;
 use function strcasecmp;
 use function strnatcasecmp;
-use function strpos;
 use function strtolower;
 
 /**
@@ -80,6 +81,7 @@ class Utilities
      * @param string $error_message Error message as returned by server
      *
      * @return string HML text with error details
+     * @psalm-return non-empty-string
      */
     public static function formatError(int $error_number, string $error_message): string
     {
@@ -91,10 +93,7 @@ class Utilities
         if ($error_number == 2002) {
             $error .= ' - ' . $error_message;
             $error .= $separator;
-            $error .= __(
-                'The server is not responding (or the local server\'s socket'
-                . ' is not correctly configured).'
-            );
+            $error .= __('The server is not responding (or the local server\'s socket is not correctly configured).');
         } elseif ($error_number == 2003) {
             $error .= ' - ' . $error_message;
             $error .= $separator . __('The server is not responding.');
@@ -103,17 +102,14 @@ class Utilities
             $error .= $separator . '<a href="' . Url::getFromRoute('/logout') . '" class="disableAjax">';
             $error .= __('Logout and try as another user.') . '</a>';
         } elseif ($error_number == 1005) {
-            if (strpos($error_message, 'errno: 13') !== false) {
+            if (str_contains($error_message, 'errno: 13')) {
                 $error .= ' - ' . $error_message;
                 $error .= $separator
-                    . __(
-                        'Please check privileges of directory containing database.'
-                    );
+                    . __('Please check privileges of directory containing database.');
             } else {
                 /**
                  * InnoDB constraints, see
-                 * https://dev.mysql.com/doc/refman/5.0/en/
-                 * innodb-foreign-key-constraints.html
+                 * https://dev.mysql.com/doc/refman/8.0/en/create-table-foreign-keys.html
                  */
                 $error .= ' - ' . $error_message .
                     ' (<a href="' .
@@ -143,21 +139,15 @@ class Utilities
         global $cfg;
 
         /* No sorting when key is not present */
-        if (
-            ! isset($a[$sortBy], $b[$sortBy])
-        ) {
+        if (! isset($a[$sortBy], $b[$sortBy])) {
             return 0;
         }
 
         // produces f.e.:
         // return -1 * strnatcasecmp($a['SCHEMA_TABLES'], $b['SCHEMA_TABLES'])
-        $compare = $cfg['NaturalOrder'] ? strnatcasecmp(
-            $a[$sortBy],
-            $b[$sortBy]
-        ) : strcasecmp(
-            $a[$sortBy],
-            $b[$sortBy]
-        );
+        $compare = $cfg['NaturalOrder']
+            ? strnatcasecmp($a[$sortBy], $b[$sortBy])
+            : strcasecmp($a[$sortBy], $b[$sortBy]);
 
         return ($sortOrder === 'ASC' ? 1 : -1) * $compare;
     }
@@ -177,10 +167,10 @@ class Utilities
     /**
      * Stores query data into session data for debugging purposes
      *
-     * @param string      $query        Query text
-     * @param string|null $errorMessage Error message from getError()
-     * @param object|bool $result       Query result
-     * @param int|float   $time         Time to execute query
+     * @param string                $query        Query text
+     * @param string|null           $errorMessage Error message from getError()
+     * @param ResultInterface|false $result       Query result
+     * @param int|float             $time         Time to execute query
      */
     public static function debugLogQueryIntoSession(string $query, ?string $errorMessage, $result, $time): void
     {

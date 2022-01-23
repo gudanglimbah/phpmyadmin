@@ -7,9 +7,9 @@ namespace PhpMyAdmin\Controllers\Preferences;
 use PhpMyAdmin\Config;
 use PhpMyAdmin\Config\ConfigFile;
 use PhpMyAdmin\Config\Forms\User\SqlForm;
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\Controllers\AbstractController;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\TwoFactor;
 use PhpMyAdmin\Url;
@@ -29,11 +29,8 @@ class SqlController extends AbstractController
     /** @var Config */
     private $config;
 
-    /**
-     * @param Response $response
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
         UserPreferences $userPreferences,
         Relation $relation,
@@ -45,7 +42,7 @@ class SqlController extends AbstractController
         $this->config = $config;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $cfg, $cf, $error, $tabHash, $hash, $server, $route;
 
@@ -75,11 +72,7 @@ class SqlController extends AbstractController
                 $this->config->loadUserPreferences();
                 $tabHash = $_POST['tab_hash'] ?? null;
                 $hash = ltrim($tabHash, '#');
-                $this->userPreferences->redirect(
-                    'index.php?route=/preferences/sql',
-                    null,
-                    $hash
-                );
+                $this->userPreferences->redirect('index.php?route=/preferences/sql', null, $hash);
 
                 return;
             }
@@ -89,12 +82,12 @@ class SqlController extends AbstractController
 
         $this->addScriptFiles(['config.js']);
 
-        $cfgRelation = $this->relation->getRelationsParam();
+        $relationParameters = $this->relation->getRelationParameters();
 
         $this->render('preferences/header', [
             'route' => $route,
             'is_saved' => ! empty($_GET['saved']),
-            'has_config_storage' => $cfgRelation['userconfigwork'],
+            'has_config_storage' => $relationParameters->userPreferencesFeature !== null,
         ]);
 
         if ($formDisplay->hasErrors()) {

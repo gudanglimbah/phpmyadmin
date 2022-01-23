@@ -63,10 +63,8 @@ class WindowsNt extends Base
 
     /**
      * Checks whether class is supported in this environment
-     *
-     * @return bool true on success
      */
-    public function supported()
+    public function supported(): bool
     {
         return $this->wmi !== null;
     }
@@ -84,11 +82,13 @@ class WindowsNt extends Base
         $arrData = [];
 
         $objWEBM = $this->wmi->Get($strClass);
+        // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
         $arrProp = $objWEBM->Properties_;
         $arrWEBMCol = $objWEBM->Instances_();
         foreach ($arrWEBMCol as $objItem) {
             $arrInstance = [];
             foreach ($arrProp as $propItem) {
+                // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
                 $name = $propItem->Name;
                 if (! empty($strValue) && ! in_array($name, $strValue)) {
                     continue;

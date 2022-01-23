@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Controllers\Database;
 
 use PhpMyAdmin\CheckUserPrivileges;
-use PhpMyAdmin\Core;
 use PhpMyAdmin\Database\Routines;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\DbTableExists;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
@@ -28,19 +27,19 @@ class RoutinesController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, $db, CheckUserPrivileges $checkUserPrivileges, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        string $db,
+        CheckUserPrivileges $checkUserPrivileges,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template, $db);
         $this->checkUserPrivileges = $checkUserPrivileges;
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $table, $tables, $num_tables, $total_num_tables, $sub_part;
         global $tooltip_truename, $tooltip_aliasname, $pos;
@@ -102,7 +101,7 @@ class RoutinesController extends AbstractController
         $routines->handleExecute();
         $routines->export();
 
-        if (! Core::isValid($type, ['FUNCTION', 'PROCEDURE'])) {
+        if (! isset($type) || ! in_array($type, ['FUNCTION', 'PROCEDURE'])) {
             $type = null;
         }
 

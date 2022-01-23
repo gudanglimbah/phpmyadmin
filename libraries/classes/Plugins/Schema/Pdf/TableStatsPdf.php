@@ -23,9 +23,9 @@ use function sprintf;
  * This class preserves the table co-ordinates,fields
  * and helps in drawing/generating the Tables in PDF document.
  *
- * @see     PMA_Schema_PDF
+ * @see     Schema\Pdf
  *
- * @name    TableStatsPdf
+ * @property Pdf $diagram
  */
 class TableStatsPdf extends TableStats
 {
@@ -40,7 +40,7 @@ class TableStatsPdf extends TableStats
      * @see TableStatsPdf::setWidthTable
      * @see PhpMyAdmin\Plugins\Schema\Pdf\TableStatsPdf::setHeightTable
      *
-     * @param object $diagram        The PDF diagram
+     * @param Pdf    $diagram        The PDF diagram
      * @param string $db             The database name
      * @param string $tableName      The table name
      * @param int    $fontSize       The font size
@@ -63,15 +63,7 @@ class TableStatsPdf extends TableStats
         $tableDimension = false,
         $offline = false
     ) {
-        parent::__construct(
-            $diagram,
-            $db,
-            $pageNumber,
-            $tableName,
-            $showKeys,
-            $tableDimension,
-            $offline
-        );
+        parent::__construct($diagram, $db, $pageNumber, $tableName, $showKeys, $tableDimension, $offline);
 
         $this->heightCell = 6;
         $this->setHeight();
@@ -89,10 +81,8 @@ class TableStatsPdf extends TableStats
 
     /**
      * Displays an error when the table cannot be found.
-     *
-     * @return void
      */
-    protected function showMissingTableError()
+    protected function showMissingTableError(): void
     {
         ExportRelationSchema::dieSchema(
             $this->pageNumber,
@@ -123,12 +113,8 @@ class TableStatsPdf extends TableStats
      * @see    PMA_Schema_PDF
      *
      * @param int $fontSize The font size
-     *
-     * @return void
-     *
-     * @access private
      */
-    private function setWidth($fontSize)
+    private function setWidth($fontSize): void
     {
         foreach ($this->fields as $field) {
             $this->width = max($this->width, $this->diagram->GetStringWidth($field));
@@ -149,12 +135,8 @@ class TableStatsPdf extends TableStats
 
     /**
      * Sets the height of the table
-     *
-     * @return void
-     *
-     * @access private
      */
-    private function setHeight()
+    private function setHeight(): void
     {
         $this->height = (count($this->fields) + 1) * $this->heightCell;
     }
@@ -162,17 +144,13 @@ class TableStatsPdf extends TableStats
     /**
      * Do draw the table
      *
-     * @see    PMA_Schema_PDF
+     * @see    Schema\Pdf
      *
-     * @param int      $fontSize The font size
+     * @param int|null $fontSize The font size or null to use the default value
      * @param bool     $withDoc  Whether to include links to documentation
-     * @param bool|int $setColor Whether to display color
-     *
-     * @return void
-     *
-     * @access public
+     * @param bool     $setColor Whether to display color
      */
-    public function tableDraw($fontSize, $withDoc, $setColor = 0)
+    public function tableDraw(?int $fontSize, bool $withDoc, bool $setColor = false): void
     {
         $this->diagram->setXyScale($this->x, $this->y);
         $this->diagram->SetFont($this->ff, 'B', $fontSize);
@@ -182,10 +160,7 @@ class TableStatsPdf extends TableStats
         }
 
         if ($withDoc) {
-            $this->diagram->SetLink(
-                $this->diagram->customLinks['RT'][$this->tableName]['-'],
-                -1
-            );
+            $this->diagram->SetLink($this->diagram->customLinks['RT'][$this->tableName]['-'], -1);
         } else {
             $this->diagram->customLinks['doc'][$this->tableName]['-'] = '';
         }
@@ -217,10 +192,7 @@ class TableStatsPdf extends TableStats
             }
 
             if ($withDoc) {
-                $this->diagram->SetLink(
-                    $this->diagram->customLinks['RT'][$this->tableName][$field],
-                    -1
-                );
+                $this->diagram->SetLink($this->diagram->customLinks['RT'][$this->tableName][$field], -1);
             } else {
                 $this->diagram->customLinks['doc'][$this->tableName][$field] = '';
             }

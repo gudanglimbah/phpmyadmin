@@ -16,16 +16,6 @@ use ReflectionClass;
 class ConfigGeneratorTest extends AbstractTestCase
 {
     /**
-     * Sets up the fixture, for example, opens a network connection.
-     * This method is called before a test is executed.
-     */
-    protected function setUp(): void
-    {
-        parent::setUp();
-        parent::loadDefaultConfig();
-    }
-
-    /**
      * Test for ConfigGenerator::getConfigFile
      *
      * @group medium
@@ -192,10 +182,7 @@ class ConfigGeneratorTest extends AbstractTestCase
 
         $result = $method->invoke(null, $arr, "\n");
 
-        $this->assertEquals(
-            '[1, 2, 3, 4]',
-            $result
-        );
+        $this->assertEquals('[1, 2, 3, 4]', $result);
 
         $arr = [
             1,

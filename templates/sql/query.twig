@@ -17,8 +17,7 @@
           <div class="row">
             <div class="col">
               <div class="mb-3">
-                <textarea class="form-control" tabindex="100" name="sql_query" id="sqlquery" cols="{{ textarea_cols }}" rows="{{ textarea_rows }}"
-                  {{- textarea_auto_select ? ' onclick="Functions.selectContent(this, sqlBoxLocked, true);"' }} aria-label="{% trans 'SQL query' %}">
+                <textarea class="form-control" tabindex="100" name="sql_query" id="sqlquery" cols="{{ textarea_cols }}" rows="{{ textarea_rows }}" data-textarea-auto-select="{{ textarea_auto_select ? "true" : "false"}}" aria-label="{% trans 'SQL query' %}">
                   {{- query -}}
                 </textarea>
               </div>
@@ -61,7 +60,7 @@
               <div class="col-xl-2 col-lg-3">
                 <div class="mb-3">
                   <label class="visually-hidden" for="fieldsSelect">{% trans 'Columns' %}</label>
-                  <select class="form-control" id="fieldsSelect" name="dummy" size="{{ textarea_rows }}" ondblclick="Functions.insertValueQuery()" multiple>
+                  <select class="form-control resize-vertical" id="fieldsSelect" name="dummy" size="{{ textarea_rows }}" ondblclick="Functions.insertValueQuery()" multiple>
                     {% for field in columns_list %}
                       <option value="{{ backquote(field['Field']) }}"
                         {{- field['Field'] is not null and field['Comment'] is not null and field['Field']|length > 0 ? ' title="' ~ field['Comment'] ~ '"' }}>
@@ -211,3 +210,19 @@
 </form>
 
 <div id="sqlqueryresultsouter"></div>
+
+<div class="modal fade" id="simulateDmlModal" tabindex="-1" aria-labelledby="simulateDmlModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="simulateDmlModalLabel">{% trans 'Simulate query' %}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+      </div>
+      <div class="modal-body">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans 'Close' %}</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -5,14 +5,14 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Controllers\Table;
 
 use PhpMyAdmin\Config;
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\Core;
 use PhpMyAdmin\CreateAddField;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\DbTableExists;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Message;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Table\ColumnsDefinition;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Transformations;
@@ -42,21 +42,15 @@ class AddFieldController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name.
-     * @param string            $table    Table name.
-     * @param DatabaseInterface $dbi
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
-        $db,
-        $table,
+        string $db,
+        string $table,
         Transformations $transformations,
         Config $config,
         Relation $relation,
-        $dbi
+        DatabaseInterface $dbi
     ) {
         parent::__construct($response, $template, $db, $table);
         $this->transformations = $transformations;
@@ -65,7 +59,7 @@ class AddFieldController extends AbstractController
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $errorUrl, $message, $action, $active_page, $sql_query;
         global $num_fields, $regenerate, $result, $db, $table;
@@ -113,25 +107,19 @@ class AddFieldController extends AbstractController
 
             $createAddField = new CreateAddField($this->dbi);
 
-            $sqlQuery = $createAddField->getColumnCreationQuery($table);
+            $sql_query = $createAddField->getColumnCreationQuery($table);
 
             // If there is a request for SQL previewing.
             if (isset($_POST['preview_sql'])) {
-                Core::previewSQL($sqlQuery);
+                Core::previewSQL($sql_query);
 
                 return;
             }
 
-            [$result, $sql_query] = $createAddField->tryColumnCreationQuery($db, $sqlQuery, $errorUrl);
+            $result = $createAddField->tryColumnCreationQuery($db, $sql_query, $errorUrl);
 
             if ($result !== true) {
-                $error_message_html = Generator::mysqlDie(
-                    '',
-                    '',
-                    false,
-                    $errorUrl,
-                    false
-                );
+                $error_message_html = Generator::mysqlDie('', '', false, $errorUrl, false);
                 $this->response->addHTML($error_message_html ?? '');
                 $this->response->setRequestStatus(false);
 
@@ -139,16 +127,9 @@ class AddFieldController extends AbstractController
             }
 
             // Update comment table for mime types [MIME]
-            if (
-                isset($_POST['field_mimetype'])
-                && is_array($_POST['field_mimetype'])
-                && $cfg['BrowseMIME']
-            ) {
+            if (isset($_POST['field_mimetype']) && is_array($_POST['field_mimetype']) && $cfg['BrowseMIME']) {
                 foreach ($_POST['field_mimetype'] as $fieldindex => $mimetype) {
-                    if (
-                        ! isset($_POST['field_name'][$fieldindex])
-                        || strlen($_POST['field_name'][$fieldindex]) <= 0
-                    ) {
+                    if (! isset($_POST['field_name'][$fieldindex]) || strlen($_POST['field_name'][$fieldindex]) <= 0) {
                         continue;
                     }
 
@@ -173,6 +154,16 @@ class AddFieldController extends AbstractController
             $this->response->addJSON(
                 'message',
                 Generator::getMessage($message, $sql_query, 'success')
+            );
+
+            // Give an URL to call and use to appends the structure after the success message
+            $this->response->addJSON(
+                'structure_refresh_route',
+                Url::getFromRoute('/table/structure', [
+                    'db' => $db,
+                    'table' => $table,
+                    'ajax_request' => '1',
+                ])
             );
 
             return;

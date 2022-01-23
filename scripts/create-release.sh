@@ -19,6 +19,8 @@ set -e
 
 KITS="all-languages english source"
 COMPRESSIONS="zip-7z txz tgz"
+# The version series this script is allowed to handle
+VERSION_SERIES="5.2"
 
 # Process parameters
 
@@ -123,16 +125,20 @@ cleanup_composer_vendors() {
     rm -rf \
         vendor/phpmyadmin/sql-parser/tests/ \
         vendor/phpmyadmin/sql-parser/tools/ \
+        vendor/phpmyadmin/sql-parser/src/Tools/ \
         vendor/phpmyadmin/sql-parser/locale/sqlparser.pot \
         vendor/phpmyadmin/sql-parser/locale/*/LC_MESSAGES/sqlparser.po \
         vendor/phpmyadmin/sql-parser/bin/ \
         vendor/phpmyadmin/sql-parser/phpunit.xml.dist \
         vendor/phpmyadmin/motranslator/phpunit.xml.dist \
         vendor/phpmyadmin/motranslator/tests/ \
-        vendor/phpmyadmin/shapefile/phpunit.xml \
+        vendor/phpmyadmin/shapefile/codecov.yml \
+        vendor/phpmyadmin/shapefile/phpunit.xml.dist \
         vendor/phpmyadmin/shapefile/tests/ \
         vendor/phpmyadmin/shapefile/examples/ \
         vendor/phpmyadmin/shapefile/data/ \
+        vendor/phpmyadmin/shapefile/phpstan-baseline.neon \
+        vendor/phpmyadmin/shapefile/phpstan.neon.dist \
         vendor/phpmyadmin/twig-i18n-extension/README.rst \
         vendor/phpmyadmin/twig-i18n-extension/phpunit.xml.dist \
         vendor/phpmyadmin/twig-i18n-extension/test/ \
@@ -141,13 +147,16 @@ cleanup_composer_vendors() {
         vendor/phpseclib/phpseclib/phpseclib/Net/ \
         vendor/phpseclib/phpseclib/phpseclib/System/ \
         vendor/phpseclib/phpseclib/appveyor.yml \
+        vendor/phpseclib/phpseclib/.github \
         vendor/symfony/cache/Tests/ \
+        vendor/symfony/service-contracts/Test/ \
         vendor/symfony/expression-language/Tests/ \
         vendor/symfony/expression-language/Resources/ \
+        vendor/symfony/dependency-injection/Loader/schema/dic/services/services-1.0.xsd \
         vendor/tecnickcom/tcpdf/examples/ \
         vendor/tecnickcom/tcpdf/tools/ \
         vendor/tecnickcom/tcpdf/fonts/ae_fonts_*/ \
-        vendor/tecnickcom/tcpdf/fonts/dejavu-fonts-ttf-2.34/ \
+        vendor/tecnickcom/tcpdf/fonts/dejavu-fonts-ttf-2.*/ \
         vendor/tecnickcom/tcpdf/fonts/freefont-*/ \
         vendor/tecnickcom/tcpdf/include/sRGB.icc \
         vendor/tecnickcom/tcpdf/.git \
@@ -163,6 +172,8 @@ cleanup_composer_vendors() {
         vendor/williamdes/mariadb-mysql-kbs/dist/merged-raw.md \
         vendor/williamdes/mariadb-mysql-kbs/dist/merged-slim.json \
         vendor/williamdes/mariadb-mysql-kbs/dist/merged-ultraslim.php \
+        vendor/code-lts/u2f-php-server/phpunit.xml \
+        vendor/code-lts/u2f-php-server/test/ \
         vendor/nikic/fast-route/.travis.yml \
         vendor/nikic/fast-route/.hhconfig \
         vendor/nikic/fast-route/FastRoute.hhi \
@@ -177,34 +188,41 @@ cleanup_composer_vendors() {
         vendor/twig/twig/.editorconfig \
         vendor/twig/twig/.php_cs.dist \
         vendor/twig/twig/drupal_test.sh \
+        vendor/webmozart/assert/.editorconfig \
+        vendor/webmozart/assert/.github/ \
+        vendor/webmozart/assert/.php_cs \
+        vendor/webmozart/assert/psalm.xml \
+        vendor/twig/twig/src/Test/ \
+        vendor/psr/log/Psr/Log/Test/ \
         vendor/paragonie/constant_time_encoding/tests/ \
         vendor/paragonie/constant_time_encoding/psalm.xml \
         vendor/paragonie/constant_time_encoding/phpunit.xml.dist \
         vendor/paragonie/constant_time_encoding/.travis.yml \
+        vendor/paragonie/random_compat/build-phar.sh \
+        vendor/paragonie/random_compat/dist/random_compat.phar.pubkey \
+        vendor/paragonie/random_compat/dist/random_compat.phar.pubkey.asc \
+        vendor/paragonie/random_compat/psalm.xml \
         vendor/pragmarx/google2fa/phpstan.neon \
         vendor/pragmarx/google2fa-qrcode/.scrutinizer.yml \
         vendor/pragmarx/google2fa-qrcode/.travis.yml \
         vendor/pragmarx/google2fa-qrcode/phpunit.xml \
         vendor/pragmarx/google2fa-qrcode/tests \
+        vendor/google/recaptcha/app.yaml \
         vendor/google/recaptcha/.travis.yml \
         vendor/google/recaptcha/phpunit.xml.dist \
         vendor/google/recaptcha/.github/ \
         vendor/google/recaptcha/examples/ \
         vendor/google/recaptcha/tests/
     rm -rf \
+        vendor/google/recaptcha/ARCHITECTURE.md \
         vendor/google/recaptcha/CONTRIBUTING.md \
         vendor/phpmyadmin/motranslator/CODE_OF_CONDUCT.md \
         vendor/phpmyadmin/motranslator/CONTRIBUTING.md \
         vendor/phpmyadmin/motranslator/PERFORMANCE.md \
         vendor/phpmyadmin/shapefile/CONTRIBUTING.md \
+        vendor/phpmyadmin/shapefile/CODE_OF_CONDUCT.md \
         vendor/phpmyadmin/sql-parser/CODE_OF_CONDUCT.md \
         vendor/phpmyadmin/sql-parser/CONTRIBUTING.md
-    find vendor/phpseclib/phpseclib/phpseclib/Crypt/ -maxdepth 1 -type f \
-        -not -name AES.php \
-        -not -name Base.php \
-        -not -name Random.php \
-        -not -name Rijndael.php \
-        -print0 | xargs -0 rm
     find vendor/tecnickcom/tcpdf/fonts/ -maxdepth 1 -type f \
         -not -name 'dejavusans.*' \
         -not -name 'dejavusansb.*' \
@@ -247,6 +265,21 @@ delete_phpunit_sandbox() {
     rm -rf "${TEMP_PHPUNIT_FOLDER}"
 }
 
+security_checkup() {
+    if [ ! -f vendor/tecnickcom/tcpdf/tcpdf.php ]; then
+        echo 'TCPDF should be installed, detection failed !'
+        exit 1;
+    fi
+    if [ ! -f vendor/code-lts/u2f-php-server/src/U2FServer.php ]; then
+        echo 'U2F-server should be installed, detection failed !'
+        exit 1;
+    fi
+    if [ ! -f vendor/pragmarx/google2fa-qrcode/src/Google2FA.php ]; then
+        echo 'Google 2FA should be installed, detection failed !'
+        exit 1;
+    fi
+}
+
 # Ensure we have tracking branch
 ensure_local_branch $branch
 
@@ -256,6 +289,19 @@ VERSION_FILE=libraries/classes/Version.php
 fetchReleaseFromFile() {
     php -r "define('VERSION_SUFFIX', ''); require_once('libraries/classes/Version.php'); echo \PhpMyAdmin\Version::VERSION;"
 }
+
+fetchVersionSeriesFromFile() {
+    php -r "define('VERSION_SUFFIX', ''); require_once('libraries/classes/Version.php'); echo \PhpMyAdmin\Version::SERIES;"
+}
+
+VERSION_SERIES_FROM_FILE="$(fetchVersionSeriesFromFile)"
+
+if [ "${VERSION_SERIES_FROM_FILE}" != "${VERSION_SERIES}" ]; then
+    echo "This script can not handle ${VERSION_SERIES_FROM_FILE} version series."
+    echo "Only ${VERSION_SERIES} version series are allowed, please use your target branch directly or another branch."
+    echo "By changing branches you will have a release script that was designed for your version series."
+    exit 1;
+fi
 
 echo "The actual configured release is: $(fetchReleaseFromFile)"
 
@@ -307,7 +353,7 @@ fi
 
 if [ $do_daily -eq 1 ] ; then
     echo '* setting the version suffix for the snapshot'
-    sed -i "s/'VERSION_SUFFIX', '.*'/'VERSION_SUFFIX', '+$today_date.$git_head_short'/" libraries/vendor_config.php
+    sed -i "s/'versionSuffix' => '.*'/'versionSuffix' => '+$today_date.$git_head_short'/" libraries/vendor_config.php
     php -l libraries/vendor_config.php
 fi
 
@@ -375,10 +421,7 @@ if [ -f ./scripts/console ]; then
     ./scripts/console cache:warmup --routing
 fi
 
-case "$branch" in
-    QA_4*) PHP_REQ=$(sed -n '/"php"/ s/.*">=\([0-9]\.[0-9]\).*/\1/p' composer.json) ;;
-    *) PHP_REQ=$(sed -n '/"php"/ s/.*"\^\([0-9]\.[0-9]\.[0-9]\).*/\1/p' composer.json) ;;
-esac
+PHP_REQ=$(sed -n '/"php"/ s/.*"\^\([0-9]\.[0-9]\.[0-9]\).*/\1/p' composer.json)
 
 if [ -z "$PHP_REQ" ] ; then
     echo "Failed to figure out required PHP version from composer.json"
@@ -395,10 +438,7 @@ composer update --no-interaction --no-dev --optimize-autoloader
 
 # Parse the required versions from composer.json
 PACKAGES_VERSIONS=''
-case "$branch" in
-    QA_4*) PACKAGE_LIST="tecnickcom/tcpdf pragmarx/google2fa bacon/bacon-qr-code samyoul/u2f-php-server" ;;
-    *) PACKAGE_LIST="tecnickcom/tcpdf pragmarx/google2fa-qrcode bacon/bacon-qr-code samyoul/u2f-php-server" ;;
-esac
+PACKAGE_LIST='tecnickcom/tcpdf pragmarx/google2fa-qrcode bacon/bacon-qr-code code-lts/u2f-php-server'
 
 for PACKAGES in $PACKAGE_LIST
 do
@@ -410,8 +450,12 @@ echo "Installing composer packages '$PACKAGES_VERSIONS'"
 
 composer require --no-interaction --optimize-autoloader --update-no-dev $PACKAGES_VERSIONS
 
+security_checkup
+
 mv composer.json.backup composer.json
 cleanup_composer_vendors
+
+security_checkup
 if [ $do_tag -eq 1 ] ; then
     echo "* Commiting composer.lock"
     git add --force composer.lock
@@ -438,7 +482,7 @@ if [ $do_test -eq 1 ] ; then
     backup_vendor_folder
     # Generate an autoload for test class files (and include dev namespaces)
     composer dump-autoload --dev || php -r "echo 'Requires: composer >= v2.1.2' . PHP_EOL; exit(1);"
-    "${TEMP_PHPUNIT_FOLDER}/vendor/bin/phpunit" --no-coverage --exclude-group selenium
+    "${TEMP_PHPUNIT_FOLDER}/vendor/bin/phpunit" --no-coverage --testsuite unit
     test_ret=$?
     if [ $do_ci -eq 1 ] ; then
         cd ../..
@@ -461,6 +505,8 @@ if [ $do_test -eq 1 ] ; then
     delete_phpunit_sandbox
     restore_vendor_folder
 fi
+
+security_checkup
 
 cd ..
 

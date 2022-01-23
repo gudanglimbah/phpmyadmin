@@ -17,7 +17,6 @@ class NormalizationControllerTest extends AbstractTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        parent::loadDefaultConfig();
         parent::setLanguage();
         parent::setTheme();
         parent::setGlobalDbi();
@@ -66,8 +65,12 @@ class NormalizationControllerTest extends AbstractTestCase
         $containerBuilder->setParameter('table', $GLOBALS['table']);
         /** @var NormalizationController $normalizationController */
         $normalizationController = $containerBuilder->get(NormalizationController::class);
-        $normalizationController->index();
+        $normalizationController();
+
+        $this->assertResponseWasSuccessfull();
+
         $this->getResponseJsonResult();// Will echo the contents
+
         $data = (string) json_encode(
             [
                 'html' => '<p><b>In order to put the original table \'test_tbl\' into '
@@ -114,7 +117,7 @@ class NormalizationControllerTest extends AbstractTestCase
         $containerBuilder->setParameter('table', $GLOBALS['table']);
         /** @var NormalizationController $normalizationController */
         $normalizationController = $containerBuilder->get(NormalizationController::class);
-        $normalizationController->index();
+        $normalizationController();
         $this->expectOutputString(
             '<p><b>In order to put the original table \'test_tbl\' into Second normal'
             . ' form we need to create the following tables:</b></p><p><input type="text" '
@@ -142,15 +145,20 @@ class NormalizationControllerTest extends AbstractTestCase
         $containerBuilder->setParameter('table', $GLOBALS['table']);
         /** @var NormalizationController $normalizationController */
         $normalizationController = $containerBuilder->get(NormalizationController::class);
-        $normalizationController->index();
+        $this->dummyDbi->addSelectDb('my_db');
+        $normalizationController();
+        $this->assertAllSelectsConsumed();
+
+        $this->assertResponseWasSuccessfull();
+
         $this->assertSame(
-            $this->getResponseJsonResult(),
             [
                 'legendText' => 'End of step',
                 'headText' => '<h3>The second step of normalization is complete for table \'test_tbl\'.</h3>',
                 'queryError' => false,
                 'extra' => '',
-            ]
+            ],
+            $this->getResponseJsonResult()
         );
     }
 
@@ -177,15 +185,20 @@ class NormalizationControllerTest extends AbstractTestCase
         $containerBuilder->setParameter('table', $GLOBALS['table']);
         /** @var NormalizationController $normalizationController */
         $normalizationController = $containerBuilder->get(NormalizationController::class);
-        $normalizationController->index();
+        $this->dummyDbi->addSelectDb('my_db');
+        $normalizationController();
+        $this->assertAllSelectsConsumed();
+
+        $this->assertResponseWasSuccessfull();
+
         $this->assertSame(
-            $this->getResponseJsonResult(),
             [
                 'legendText' => 'End of step',
                 'headText' => '<h3>The third step of normalization is complete.</h3>',
                 'queryError' => false,
                 'extra' => '',
-            ]
+            ],
+            $this->getResponseJsonResult()
         );
     }
 }

@@ -50,7 +50,7 @@
         {% include 'columns_definitions/table_fields_definitions.twig' with {
             'is_backup': is_backup,
             'fields_meta': fields_meta,
-            'mimework': mimework,
+            'relation_parameters': relation_parameters,
             'content_cells': content_cells,
             'change_column': change_column,
             'is_virtual_columns_supported': is_virtual_columns_supported,
@@ -160,4 +160,26 @@
             value="{% trans 'Save' %}">
     </fieldset>
     <div id="properties_message"></div>
+     {% if is_integers_length_restricted %}
+        <div class="alert alert-primary" id="length_not_allowed" role="alert">
+            {{ get_image('s_notice') }}
+            {% trans %}The column width of integer types is ignored in your MySQL version unless defining a TINYINT(1) column{% endtrans %}
+            {{ show_mysql_docu('', false, 'https://dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-19.html') }}
+        </div>
+     {% endif %}
 </form>
+<div class="modal fade" id="previewSqlModal" tabindex="-1" aria-labelledby="previewSqlModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="previewSqlModalLabel">{% trans 'Loading' %}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{% trans 'Close' %}"></button>
+      </div>
+      <div class="modal-body">
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="previewSQLCloseButton" data-bs-dismiss="modal">{% trans 'Close' %}</button>
+      </div>
+    </div>
+  </div>
+</div>

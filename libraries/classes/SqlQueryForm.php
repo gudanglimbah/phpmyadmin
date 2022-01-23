@@ -13,14 +13,15 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin;
 
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\Html\MySQLDocumentation;
 use PhpMyAdmin\Utils\ForeignKey;
 
 use function __;
 use function htmlspecialchars;
 use function sprintf;
+use function str_contains;
 use function strlen;
-use function strpos;
 
 /**
  * PhpMyAdmin\SqlQueryForm class
@@ -91,21 +92,20 @@ class SqlQueryForm
             [$legend, $query, $columns_list] = $this->init($query);
         }
 
-        $cfgBookmark = Bookmark::getParams($GLOBALS['cfg']['Server']['user']);
+        $relation = new Relation($dbi);
+        $bookmarkFeature = $relation->getRelationParameters()->bookmarkFeature;
 
         $bookmarks = [];
-        if ($display_tab === 'full') {
-            if ($cfgBookmark) {
-                $bookmark_list = Bookmark::getList($dbi, $GLOBALS['cfg']['Server']['user'], $db);
+        if ($display_tab === 'full' && $bookmarkFeature !== null) {
+            $bookmark_list = Bookmark::getList($bookmarkFeature, $dbi, $GLOBALS['cfg']['Server']['user'], $db);
 
-                foreach ($bookmark_list as $bookmarkItem) {
-                    $bookmarks[] = [
-                        'id' => $bookmarkItem->getId(),
-                        'variable_count' => $bookmarkItem->getVariableCount(),
-                        'label' => $bookmarkItem->getLabel(),
-                        'is_shared' => empty($bookmarkItem->getUser()),
-                    ];
-                }
+            foreach ($bookmark_list as $bookmarkItem) {
+                $bookmarks[] = [
+                    'id' => $bookmarkItem->getId(),
+                    'variable_count' => $bookmarkItem->getVariableCount(),
+                    'label' => $bookmarkItem->getLabel(),
+                    'is_shared' => empty($bookmarkItem->getUser()),
+                ];
             }
         }
 
@@ -116,10 +116,10 @@ class SqlQueryForm
             'textarea_auto_select' => $GLOBALS['cfg']['TextareaAutoSelect'],
             'columns_list' => $columns_list ?? [],
             'codemirror_enable' => $GLOBALS['cfg']['CodemirrorEnable'],
-            'has_bookmark' => $cfgBookmark,
+            'has_bookmark' => $bookmarkFeature !== null,
             'delimiter' => $delimiter,
             'retain_query_box' => $GLOBALS['cfg']['RetainQueryBox'] !== false,
-            'is_upload' => $GLOBALS['is_upload'],
+            'is_upload' => $GLOBALS['config']->get('enable_upload'),
             'db' => $db,
             'table' => $table,
             'goto' => $goto,
@@ -142,7 +142,7 @@ class SqlQueryForm
     {
         global $dbi;
 
-        $columns_list    = [];
+        $columns_list = [];
         if (strlen($GLOBALS['db']) === 0) {
             // prepare for server related
             $legend = sprintf(
@@ -155,48 +155,31 @@ class SqlQueryForm
             );
         } elseif (strlen($GLOBALS['table']) === 0) {
             // prepare for db related
-            $db     = $GLOBALS['db'];
+            $db = $GLOBALS['db'];
             // if you want navigation:
-            $scriptName = Util::getScriptNameForOption(
-                $GLOBALS['cfg']['DefaultTabDatabase'],
-                'database'
-            );
+            $scriptName = Util::getScriptNameForOption($GLOBALS['cfg']['DefaultTabDatabase'], 'database');
             $tmp_db_link = '<a href="' . $scriptName
-                . Url::getCommon(['db' => $db], strpos($scriptName, '?') === false ? '?' : '&')
+                . Url::getCommon(['db' => $db], ! str_contains($scriptName, '?') ? '?' : '&')
                 . '">';
             $tmp_db_link .= htmlspecialchars($db) . '</a>';
             $legend = sprintf(__('Run SQL query/queries on database %s'), $tmp_db_link);
             if (empty($query)) {
-                $query = Util::expandUserString(
-                    $GLOBALS['cfg']['DefaultQueryDatabase'],
-                    'backquote'
-                );
+                $query = Util::expandUserString($GLOBALS['cfg']['DefaultQueryDatabase'], 'backquote');
             }
         } else {
-            $db     = $GLOBALS['db'];
-            $table  = $GLOBALS['table'];
+            $db = $GLOBALS['db'];
+            $table = $GLOBALS['table'];
             // Get the list and number of fields
             // we do a try_query here, because we could be in the query window,
             // trying to synchronize and the table has not yet been created
-            $columns_list = $dbi->getColumns(
-                $db,
-                $GLOBALS['table'],
-                null,
-                true
-            );
+            $columns_list = $dbi->getColumns($db, $GLOBALS['table'], true);
 
-            $scriptName = Util::getScriptNameForOption(
-                $GLOBALS['cfg']['DefaultTabTable'],
-                'table'
-            );
+            $scriptName = Util::getScriptNameForOption($GLOBALS['cfg']['DefaultTabTable'], 'table');
             $tmp_tbl_link = '<a href="' . $scriptName . Url::getCommon(['db' => $db, 'table' => $table], '&') . '">';
             $tmp_tbl_link .= htmlspecialchars($db) . '.' . htmlspecialchars($table) . '</a>';
             $legend = sprintf(__('Run SQL query/queries on table %s'), $tmp_tbl_link);
             if (empty($query)) {
-                $query = Util::expandUserString(
-                    $GLOBALS['cfg']['DefaultQueryTable'],
-                    'backquote'
-                );
+                $query = Util::expandUserString($GLOBALS['cfg']['DefaultQueryTable'], 'backquote');
             }
         }
 

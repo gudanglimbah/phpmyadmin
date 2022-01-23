@@ -24,8 +24,6 @@ class FooterTest extends AbstractTestCase
     /**
      * Sets up the fixture, for example, opens a network connection.
      * This method is called before a test is executed.
-     *
-     * @access protected
      */
     protected function setUp(): void
     {
@@ -38,7 +36,6 @@ class FooterTest extends AbstractTestCase
         $GLOBALS['db'] = '';
         $GLOBALS['table'] = '';
         $GLOBALS['text_dir'] = 'ltr';
-        $GLOBALS['config']->enableBc();
         $GLOBALS['cfg']['Server']['DisableIS'] = false;
         $GLOBALS['cfg']['Server']['verbose'] = 'verbose host';
         $GLOBALS['server'] = '1';
@@ -54,8 +51,6 @@ class FooterTest extends AbstractTestCase
     /**
      * Tears down the fixture, for example, closes a network connection.
      * This method is called after a test is executed.
-     *
-     * @access protected
      */
     protected function tearDown(): void
     {

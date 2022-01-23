@@ -32,6 +32,33 @@ function checkAddUser (theForm) {
 }
 
 /**
+ * Export privileges modal handler
+ *
+ * @param {object} data
+ *
+ * @param {JQuery} msgbox
+ *
+ */
+function exportPrivilegesModalHandler (data, msgbox) {
+    if (typeof data !== 'undefined' && data.success === true) {
+        var modal = $('#exportPrivilegesModal');
+        // Remove any previous privilege modal data, if any
+        modal.find('.modal-body').first().html('');
+        $('#exportPrivilegesModalLabel').first().html('Loading');
+        modal.modal('show');
+        modal.on('shown.bs.modal', function () {
+            modal.find('.modal-body').first().html(data.message);
+            $('#exportPrivilegesModalLabel').first().html(data.title);
+            Functions.ajaxRemoveMessage(msgbox);
+            // Attach syntax highlighted editor to export dialog
+            Functions.getSqlEditor(modal.find('textarea'));
+        });
+        return;
+    }
+    Functions.ajaxShowMessage(data.error, false);
+}
+
+/**
  * @implements EventListener
  */
 const EditUserGroup = {
@@ -90,6 +117,46 @@ const EditUserGroup = {
 };
 
 /**
+ * @implements EventListener
+ */
+const AccountLocking = {
+    handleEvent: function () {
+        const button = this;
+        const isLocked = button.dataset.isLocked === 'true';
+        const url = isLocked
+            ? 'index.php?route=/server/privileges/account-unlock'
+            : 'index.php?route=/server/privileges/account-lock';
+        const params = {
+            'username': button.dataset.userName,
+            'hostname': button.dataset.hostName,
+            'ajax_request': true,
+            'server': CommonParams.get('server'),
+        };
+
+        $.post(url, params, data => {
+            if (data.success === false) {
+                Functions.ajaxShowMessage(data.error);
+                return;
+            }
+
+            if (isLocked) {
+                const lockIcon = Functions.getImage('s_lock', Messages.strLock, {}).toString();
+                button.innerHTML = '<span class="text-nowrap">' + lockIcon + ' ' + Messages.strLock + '</span>';
+                button.title = Messages.strLockAccount;
+                button.dataset.isLocked = 'false';
+            } else {
+                const unlockIcon = Functions.getImage('s_unlock', Messages.strUnlock, {}).toString();
+                button.innerHTML = '<span class="text-nowrap">' + unlockIcon + ' ' + Messages.strUnlock + '</span>';
+                button.title = Messages.strUnlockAccount;
+                button.dataset.isLocked = 'true';
+            }
+
+            Functions.ajaxShowMessage(data.message);
+        });
+    }
+};
+
+/**
  * AJAX scripts for /server/privileges page.
  *
  * Actions ajaxified here:
@@ -119,6 +186,7 @@ AJAX.registerTeardown('server/privileges.js', function () {
 
     $(document).off('click', 'button.mult_submit[value=export]');
     $(document).off('click', 'a.export_user_anchor.ajax');
+    $('button.jsAccountLocking').off('click');
     $('#dropUsersDbCheckbox').off('click');
     $(document).off('click', '.checkall_box');
     $(document).off('change', '#checkbox_SSL_priv');
@@ -277,72 +345,28 @@ AJAX.registerOnload('server/privileges.js', function () {
             Functions.ajaxShowMessage(Messages.strNoAccountSelected, 2000, 'success');
             return;
         }
-        var $msgbox = Functions.ajaxShowMessage();
-        var buttonOptions = {};
-        buttonOptions[Messages.strClose] = function () {
-            $(this).dialog('close');
-        };
+        var msgbox = Functions.ajaxShowMessage();
         var argsep = CommonParams.get('arg_separator');
         var serverId = CommonParams.get('server');
         var selectedUsers = $('#usersForm input[name*=\'selected_usr\']:checkbox').serialize();
         var postStr = selectedUsers + '&submit_mult=export' + argsep + 'ajax_request=true&server=' + serverId;
-        $.post(
-            $(this.form).prop('action'),
-            postStr,
-            function (data) {
-                if (typeof data !== 'undefined' && data.success === true) {
-                    var $ajaxDialog = $('<div></div>')
-                        .append(data.message)
-                        .dialog({
-                            title: data.title,
-                            width: 500,
-                            buttons: buttonOptions,
-                            close: function () {
-                                $(this).remove();
-                            }
-                        });
-                    Functions.ajaxRemoveMessage($msgbox);
-                    // Attach syntax highlighted editor to export dialog
-                    Functions.getSqlEditor($ajaxDialog.find('textarea'));
-                } else {
-                    Functions.ajaxShowMessage(data.error, false);
-                }
-            }
-        ); // end $.post
+
+        $.post($(this.form).prop('action'), postStr, function (data) {
+            exportPrivilegesModalHandler(data, msgbox);
+        }); // end $.post
     });
     // if exporting non-ajax, highlight anyways
     Functions.getSqlEditor($('textarea.export'));
 
     $(document).on('click', 'a.export_user_anchor.ajax', function (event) {
         event.preventDefault();
-        var $msgbox = Functions.ajaxShowMessage();
-        /**
-         * @var button_options  Object containing options for jQueryUI dialog buttons
-         */
-        var buttonOptions = {};
-        buttonOptions[Messages.strClose] = function () {
-            $(this).dialog('close');
-        };
+        var msgbox = Functions.ajaxShowMessage();
         $.get($(this).attr('href'), { 'ajax_request': true }, function (data) {
-            if (typeof data !== 'undefined' && data.success === true) {
-                var $ajaxDialog = $('<div></div>')
-                    .append(data.message)
-                    .dialog({
-                        title: data.title,
-                        width: 500,
-                        buttons: buttonOptions,
-                        close: function () {
-                            $(this).remove();
-                        }
-                    });
-                Functions.ajaxRemoveMessage($msgbox);
-                // Attach syntax highlighted editor to export dialog
-                Functions.getSqlEditor($ajaxDialog.find('textarea'));
-            } else {
-                Functions.ajaxShowMessage(data.error, false);
-            }
+            exportPrivilegesModalHandler(data, msgbox);
         }); // end $.get
     }); // end export privileges
+
+    $('button.jsAccountLocking').on('click', AccountLocking.handleEvent);
 
     $(document).on('change', 'input[name="ssl_type"]', function () {
         var $div = $('#specified_div');
@@ -431,6 +455,25 @@ AJAX.registerOnload('server/privileges.js', function () {
     if ($('#edit_user_dialog').length > 0) {
         addOrUpdateSubmenu();
     }
+
+    /**
+     * Select all privileges
+     *
+     * @param {HTMLElement} e
+     * @return {void}
+     */
+    var tableSelectAll = function (e) {
+        const method = e.target.getAttribute('data-select-target');
+        var options = $(method).first().children();
+        options.each(function (_, obj) {
+            obj.selected = true;
+        });
+    };
+
+    $('#select_priv_all').on('click', tableSelectAll);
+    $('#insert_priv_all').on('click', tableSelectAll);
+    $('#update_priv_all').on('click', tableSelectAll);
+    $('#references_priv_all').on('click', tableSelectAll);
 
     var windowWidth = $(window).width();
     $('.jsresponsive').css('max-width', (windowWidth - 35) + 'px');

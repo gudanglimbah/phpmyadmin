@@ -9,6 +9,7 @@ namespace PhpMyAdmin\Plugins\Auth;
 
 use PhpMyAdmin\Core;
 use PhpMyAdmin\Plugins\AuthenticationPlugin;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Util;
 
 use function __;
@@ -36,8 +37,9 @@ class AuthenticationSignon extends AuthenticationPlugin
      *
      * @return bool always true (no return indeed)
      */
-    public function showLoginForm()
+    public function showLoginForm(): bool
     {
+        ResponseRenderer::getInstance()->disable();
         unset($_SESSION['LAST_SIGNON_URL']);
         if (empty($GLOBALS['cfg']['Server']['SignonURL'])) {
             Core::fatalError('You must set SignonURL!');
@@ -116,17 +118,12 @@ class AuthenticationSignon extends AuthenticationPlugin
 
     /**
      * Gets authentication credentials
-     *
-     * @return bool whether we get authentication settings or not
      */
-    public function readCredentials()
+    public function readCredentials(): bool
     {
         /* Check if we're using same signon server */
         $signon_url = $GLOBALS['cfg']['Server']['SignonURL'];
-        if (
-            isset($_SESSION['LAST_SIGNON_URL'])
-            && $_SESSION['LAST_SIGNON_URL'] != $signon_url
-        ) {
+        if (isset($_SESSION['LAST_SIGNON_URL']) && $_SESSION['LAST_SIGNON_URL'] != $signon_url) {
             return false;
         }
 
@@ -135,9 +132,6 @@ class AuthenticationSignon extends AuthenticationPlugin
 
         /* Session name */
         $session_name = $GLOBALS['cfg']['Server']['SignonSession'];
-
-        /* Login URL */
-        $signon_url = $GLOBALS['cfg']['Server']['SignonURL'];
 
         /* Current host */
         $single_signon_host = $GLOBALS['cfg']['Server']['host'];
@@ -149,7 +143,7 @@ class AuthenticationSignon extends AuthenticationPlugin
         $single_signon_cfgupdate = [];
 
         /* Handle script based auth */
-        if (! empty($script_name)) {
+        if ($script_name !== '') {
             if (! @file_exists($script_name)) {
                 Core::fatalError(
                     __('Can not find signon authentication script:')
@@ -220,7 +214,7 @@ class AuthenticationSignon extends AuthenticationPlugin
             /* Restart phpMyAdmin session */
             if (! defined('TESTSUITE')) {
                 $this->setCookieParams($oldCookieParams);
-                if ($old_session !== null && $old_session !== false) {
+                if ($old_session !== false) {
                     session_name($old_session);
                 }
 
@@ -238,10 +232,7 @@ class AuthenticationSignon extends AuthenticationPlugin
             $GLOBALS['cfg']['Server']['port'] = $single_signon_port;
 
             /* Configuration update */
-            $GLOBALS['cfg']['Server'] = array_merge(
-                $GLOBALS['cfg']['Server'],
-                $single_signon_cfgupdate
-            );
+            $GLOBALS['cfg']['Server'] = array_merge($GLOBALS['cfg']['Server'], $single_signon_cfgupdate);
 
             /* Restore our token */
             if (! empty($pma_token)) {
@@ -271,10 +262,8 @@ class AuthenticationSignon extends AuthenticationPlugin
      * User is not allowed to login to MySQL -> authentication failed
      *
      * @param string $failure String describing why authentication has failed
-     *
-     * @return void
      */
-    public function showFailure($failure)
+    public function showFailure($failure): void
     {
         parent::showFailure($failure);
 

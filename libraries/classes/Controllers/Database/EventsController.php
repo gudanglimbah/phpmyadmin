@@ -6,7 +6,7 @@ namespace PhpMyAdmin\Controllers\Database;
 
 use PhpMyAdmin\Database\Events;
 use PhpMyAdmin\DatabaseInterface;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
@@ -21,19 +21,19 @@ final class EventsController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name.
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, $db, Events $events, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        string $db,
+        Events $events,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template, $db);
         $this->events = $events;
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $tables, $num_tables, $total_num_tables, $sub_part, $errors, $text_dir;
         global $tooltip_truename, $tooltip_aliasname, $pos, $cfg, $errorUrl;

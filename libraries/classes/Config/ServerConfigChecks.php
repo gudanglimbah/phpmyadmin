@@ -44,10 +44,8 @@ class ServerConfigChecks
 
     /**
      * Perform config checks
-     *
-     * @return void
      */
-    public function performConfigChecks()
+    public function performConfigChecks(): void
     {
         $blowfishSecret = $this->cfg->get('blowfish_secret');
         $blowfishSecretSet = false;
@@ -59,11 +57,7 @@ class ServerConfigChecks
             $blowfishSecretSet
         );
 
-        $this->performConfigChecksCookieAuthUsed(
-            $cookieAuthUsed,
-            $blowfishSecretSet,
-            $blowfishSecret
-        );
+        $this->performConfigChecksCookieAuthUsed($cookieAuthUsed, $blowfishSecretSet, $blowfishSecret);
 
         // $cfg['AllowArbitraryServer']
         // should be disabled
@@ -140,9 +134,10 @@ class ServerConfigChecks
         $blowfishSecretSet
     ) {
         $serverCnt = $this->cfg->getServerCount();
+        $isCookieAuthUsed = (int) $cookieAuthUsed;
         for ($i = 1; $i <= $serverCnt; $i++) {
             $cookieAuthServer = ($this->cfg->getValue('Servers/' . $i . '/auth_type') === 'cookie');
-            $cookieAuthUsed |= $cookieAuthServer;
+            $isCookieAuthUsed |= (int) $cookieAuthServer;
             $serverName = $this->performConfigChecksServersGetServerName(
                 $this->cfg->getServerName($i),
                 $i
@@ -164,8 +159,7 @@ class ServerConfigChecks
                     'Servers/' . $i . '/ssl',
                     $title,
                     __(
-                        'You should use SSL connections if your database server '
-                        . 'supports it.'
+                        'You should use SSL connections if your database server supports it.'
                     )
                 );
             }
@@ -233,7 +227,7 @@ class ServerConfigChecks
         }
 
         return [
-            $cookieAuthUsed,
+            (bool) $isCookieAuthUsed,
             $blowfishSecret,
             $blowfishSecretSet,
         ];
@@ -285,10 +279,8 @@ class ServerConfigChecks
 
     /**
      * Perform config checks for zip part.
-     *
-     * @return void
      */
-    protected function performConfigChecksZips()
+    protected function performConfigChecksZips(): void
     {
         $this->performConfigChecksServerGZipdump();
         $this->performConfigChecksServerBZipdump();
@@ -297,10 +289,8 @@ class ServerConfigChecks
 
     /**
      * Perform config checks for zip part.
-     *
-     * @return void
      */
-    protected function performConfigChecksServersZipdump()
+    protected function performConfigChecksServersZipdump(): void
     {
         // $cfg['ZipDump']
         // requires zip_open in import
@@ -311,8 +301,7 @@ class ServerConfigChecks
                 Descriptions::get('ZipDump'),
                 Sanitize::sanitizeMessage(sprintf(
                     __(
-                        '%sZip decompression%s requires functions (%s) which are unavailable '
-                        . 'on this system.'
+                        '%sZip decompression%s requires functions (%s) which are unavailable on this system.'
                     ),
                     '[a@' . Url::getCommon(['page' => 'form', 'formset' => 'Features']) . '#tab_Import_export]',
                     '[/a]',
@@ -333,8 +322,7 @@ class ServerConfigChecks
             Descriptions::get('ZipDump'),
             Sanitize::sanitizeMessage(sprintf(
                 __(
-                    '%sZip compression%s requires functions (%s) which are unavailable on '
-                    . 'this system.'
+                    '%sZip compression%s requires functions (%s) which are unavailable on this system.'
                 ),
                 '[a@' . Url::getCommon(['page' => 'form', 'formset' => 'Features']) . '#tab_Import_export]',
                 '[/a]',
@@ -382,9 +370,7 @@ class ServerConfigChecks
         // check length
         if (strlen($blowfishSecret) < 32) {
             // too short key
-            $blowfishWarnings[] = __(
-                'Key is too short, it should have at least 32 characters.'
-            );
+            $blowfishWarnings[] = __('Key is too short, it should have at least 32 characters.');
         }
 
         // check used characters
@@ -394,8 +380,7 @@ class ServerConfigChecks
         if (! $hasDigits || ! $hasChars || ! $hasNonword) {
             $blowfishWarnings[] = Sanitize::sanitizeMessage(
                 __(
-                    'Key should contain letters, numbers [em]and[/em] '
-                    . 'special characters.'
+                    'Key should contain letters, numbers [em]and[/em] special characters.'
                 )
             );
         }
@@ -414,18 +399,14 @@ class ServerConfigChecks
 
     /**
      * Check configuration for login cookie
-     *
-     * @return void
      */
-    protected function performConfigChecksLoginCookie()
+    protected function performConfigChecksLoginCookie(): void
     {
         // $cfg['LoginCookieValidity']
         // value greater than session.gc_maxlifetime will cause
         // random session invalidation after that time
         $loginCookieValidity = $this->cfg->getValue('LoginCookieValidity');
-        if (
-            $loginCookieValidity > ini_get('session.gc_maxlifetime')
-        ) {
+        if ($loginCookieValidity > ini_get('session.gc_maxlifetime')) {
             SetupIndex::messagesSet(
                 'error',
                 'LoginCookieValidity',
@@ -494,10 +475,8 @@ class ServerConfigChecks
 
     /**
      * Check GZipDump configuration
-     *
-     * @return void
      */
-    protected function performConfigChecksServerBZipdump()
+    protected function performConfigChecksServerBZipdump(): void
     {
         // $cfg['BZipDump']
         // requires bzip2 functions
@@ -534,10 +513,8 @@ class ServerConfigChecks
 
     /**
      * Check GZipDump configuration
-     *
-     * @return void
      */
-    protected function performConfigChecksServerGZipdump()
+    protected function performConfigChecksServerGZipdump(): void
     {
         // $cfg['GZipDump']
         // requires zlib functions
@@ -568,10 +545,8 @@ class ServerConfigChecks
      * Wrapper around function_exists to allow mock in test
      *
      * @param string $name Function name
-     *
-     * @return bool
      */
-    protected function functionExists($name)
+    protected function functionExists($name): bool
     {
         return function_exists($name);
     }

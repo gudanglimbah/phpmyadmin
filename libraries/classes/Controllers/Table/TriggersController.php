@@ -7,7 +7,7 @@ namespace PhpMyAdmin\Controllers\Table;
 use PhpMyAdmin\Database\Triggers;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\DbTableExists;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
@@ -23,19 +23,18 @@ class TriggersController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name.
-     * @param string            $table    Table name.
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, $db, $table, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        string $db,
+        string $table,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template, $db, $table);
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $table, $tables, $num_tables, $total_num_tables, $sub_part;
         global $tooltip_truename, $tooltip_aliasname, $pos;

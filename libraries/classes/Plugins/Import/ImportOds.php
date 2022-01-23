@@ -37,19 +37,15 @@ use const PHP_VERSION_ID;
  */
 class ImportOds extends ImportPlugin
 {
-    public function __construct()
+    /**
+     * @psalm-return non-empty-lowercase-string
+     */
+    public function getName(): string
     {
-        parent::__construct();
-        $this->setProperties();
+        return 'ods';
     }
 
-    /**
-     * Sets the import plugin properties.
-     * Called in the constructor.
-     *
-     * @return void
-     */
-    protected function setProperties()
+    protected function setProperties(): ImportPluginProperties
     {
         $importPluginProperties = new ImportPluginProperties();
         $importPluginProperties->setText('OpenDocument Spreadsheet');
@@ -59,9 +55,7 @@ class ImportOds extends ImportPlugin
         // create the root group that will be the options field for
         // $importPluginProperties
         // this will be shown as "Format specific options"
-        $importSpecificOptions = new OptionsPropertyRootGroup(
-            'Format Specific Options'
-        );
+        $importSpecificOptions = new OptionsPropertyRootGroup('Format Specific Options');
 
         // general options main group
         $generalOptions = new OptionsPropertyMainGroup('general_opts');
@@ -98,29 +92,26 @@ class ImportOds extends ImportPlugin
 
         // set the options for the import plugin property item
         $importPluginProperties->setOptions($importSpecificOptions);
-        $this->properties = $importPluginProperties;
+
+        return $importPluginProperties;
     }
 
     /**
      * Handles the whole import logic
      *
      * @param array $sql_data 2-element array with sql data
-     *
-     * @return void
      */
-    public function doImport(?File $importHandle = null, array &$sql_data = [])
+    public function doImport(?File $importHandle = null, array &$sql_data = []): void
     {
         global $db, $error, $timeout_passed, $finished;
 
-        $i = 0;
-        $len = 0;
         $buffer = '';
 
         /**
          * Read in the file via Import::getNextChunk so that
          * it can process compressed files
          */
-        while (! ($finished && $i >= $len) && ! $error && ! $timeout_passed) {
+        while (! $finished && ! $error && ! $timeout_passed) {
             $data = $this->import->getNextChunk($importHandle);
             if ($data === false) {
                 /* subtract data we didn't handle yet and stop processing */
@@ -151,7 +142,7 @@ class ImportOds extends ImportPlugin
          * result in increased performance without the need to
          * alter the code in any way. It's basically a freebee.
          */
-        $xml = @simplexml_load_string($buffer, 'SimpleXMLElement', LIBXML_COMPACT);
+        $xml = @simplexml_load_string($buffer, SimpleXMLElement::class, LIBXML_COMPACT);
 
         unset($buffer);
 
@@ -159,8 +150,7 @@ class ImportOds extends ImportPlugin
             $sheets = [];
             $GLOBALS['message'] = Message::error(
                 __(
-                    'The XML file specified was either malformed or incomplete.'
-                    . ' Please correct the issue and try again.'
+                    'The XML file specified was either malformed or incomplete. Please correct the issue and try again.'
                 )
             );
             $GLOBALS['error'] = true;
@@ -250,17 +240,16 @@ class ImportOds extends ImportPlugin
     protected function getValue($cell_attrs, $text)
     {
         if (
-            $_REQUEST['ods_recognize_percentages']
-            && ! strcmp(
-                'percentage',
-                (string) $cell_attrs['value-type']
-            )
+            isset($_REQUEST['ods_recognize_percentages'])
+            && $_REQUEST['ods_recognize_percentages']
+            && ! strcmp('percentage', (string) $cell_attrs['value-type'])
         ) {
             return (float) $cell_attrs['value'];
         }
 
         if (
-            $_REQUEST['ods_recognize_currency']
+            isset($_REQUEST['ods_recognize_currency'])
+            && $_REQUEST['ods_recognize_currency']
             && ! strcmp('currency', (string) $cell_attrs['value-type'])
         ) {
             return (float) $cell_attrs['value'];
@@ -284,7 +273,6 @@ class ImportOds extends ImportPlugin
     ): array {
         $cellCount = $row->count();
         $a = 0;
-        /** @var SimpleXMLElement $cell */
         foreach ($row as $cell) {
             $a++;
             $text = $cell->children('text', true);
@@ -327,9 +315,7 @@ class ImportOds extends ImportPlugin
                     }
                 } else {
                     for ($i = 0; $i < $num_null; ++$i) {
-                        $col_names[] = $this->import->getColumnAlphaName(
-                            $col_count + 1
-                        );
+                        $col_names[] = $this->import->getColumnAlphaName($col_count + 1);
                         ++$col_count;
                     }
                 }
@@ -337,9 +323,7 @@ class ImportOds extends ImportPlugin
                 if (! $col_names_in_first_row) {
                     $tempRow[] = 'NULL';
                 } else {
-                    $col_names[] = $this->import->getColumnAlphaName(
-                        $col_count + 1
-                    );
+                    $col_names[] = $this->import->getColumnAlphaName($col_count + 1);
                 }
 
                 ++$col_count;
@@ -358,7 +342,6 @@ class ImportOds extends ImportPlugin
         int $max_cols,
         array $tempRows
     ): array {
-        /** @var SimpleXMLElement $row */
         foreach ($sheet as $row) {
             $type = $row->getName();
             if (strcmp('table-row', $type)) {

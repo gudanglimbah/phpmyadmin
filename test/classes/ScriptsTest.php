@@ -21,21 +21,16 @@ class ScriptsTest extends AbstractTestCase
     /**
      * Sets up the fixture, for example, opens a network connection.
      * This method is called before a test is executed.
-     *
-     * @access protected
      */
     protected function setUp(): void
     {
         parent::setUp();
-        $GLOBALS['config']->enableBc();
         $this->object = new Scripts();
     }
 
     /**
      * Tears down the fixture, for example, closes a network connection.
      * This method is called after a test is executed.
-     *
-     * @access protected
      */
     protected function tearDown(): void
     {
@@ -56,14 +51,8 @@ class ScriptsTest extends AbstractTestCase
             'src="js/dist/common.js?v=' . rawurlencode(Version::VERSION) . '"',
             $actual
         );
-        $this->assertStringContainsString(
-            '.add(\'common.js\', 1)',
-            $actual
-        );
-        $this->assertStringContainsString(
-            'AJAX.fireOnload(\'common.js\')',
-            $actual
-        );
+        $this->assertStringContainsString('.add(\'common.js\', 1)', $actual);
+        $this->assertStringContainsString('AJAX.fireOnload(\'common.js\')', $actual);
     }
 
     /**
@@ -75,10 +64,7 @@ class ScriptsTest extends AbstractTestCase
 
         $actual = $this->object->getDisplay();
 
-        $this->assertStringContainsString(
-            'alert(\'CodeAdded\');',
-            $actual
-        );
+        $this->assertStringContainsString('alert(\'CodeAdded\');', $actual);
     }
 
     /**

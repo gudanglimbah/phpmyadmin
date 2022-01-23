@@ -8,38 +8,31 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Dbal;
 
 use mysqli;
-use mysqli_result;
 use mysqli_stmt;
 use PhpMyAdmin\DatabaseInterface;
-use PhpMyAdmin\FieldMetadata;
 use PhpMyAdmin\Query\Utilities;
-use stdClass;
 
 use function __;
 use function defined;
-use function is_array;
-use function is_bool;
 use function mysqli_connect_errno;
 use function mysqli_connect_error;
 use function mysqli_get_client_info;
 use function mysqli_init;
 use function mysqli_report;
+use function sprintf;
 use function stripos;
 use function trigger_error;
 
+use const E_USER_ERROR;
 use const E_USER_WARNING;
-use const MYSQLI_ASSOC;
-use const MYSQLI_BOTH;
 use const MYSQLI_CLIENT_COMPRESS;
 use const MYSQLI_CLIENT_SSL;
 use const MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT;
-use const MYSQLI_NUM;
 use const MYSQLI_OPT_LOCAL_INFILE;
 use const MYSQLI_OPT_SSL_VERIFY_SERVER_CERT;
 use const MYSQLI_REPORT_OFF;
 use const MYSQLI_STORE_RESULT;
 use const MYSQLI_USE_RESULT;
-use const PHP_VERSION_ID;
 
 /**
  * Interface to the MySQL Improved extension (MySQLi)
@@ -103,10 +96,7 @@ class DbiMysqli implements DbiExtension
              * @link https://github.com/phpmyadmin/phpmyadmin/pull/11838
              */
             if (! $server['ssl_verify']) {
-                $mysqli->options(
-                    MYSQLI_OPT_SSL_VERIFY_SERVER_CERT,
-                    $server['ssl_verify']
-                );
+                $mysqli->options(MYSQLI_OPT_SSL_VERIFY_SERVER_CERT, (int) $server['ssl_verify']);
                 $client_flags |= MYSQLI_CLIENT_SSL_DONT_VERIFY_SERVER_CERT;
             }
         }
@@ -117,15 +107,27 @@ class DbiMysqli implements DbiExtension
             $host = $server['host'];
         }
 
-        $return_value = $mysqli->real_connect(
-            $host,
-            $user,
-            $password,
-            '',
-            $server['port'],
-            (string) $server['socket'],
-            $client_flags
-        );
+        if ($server['hide_connection_errors']) {
+            $return_value = @$mysqli->real_connect(
+                $host,
+                $user,
+                $password,
+                '',
+                $server['port'],
+                (string) $server['socket'],
+                $client_flags
+            );
+        } else {
+            $return_value = $mysqli->real_connect(
+                $host,
+                $user,
+                $password,
+                '',
+                $server['port'],
+                (string) $server['socket'],
+                $client_flags
+            );
+        }
 
         if ($return_value === false) {
             /*
@@ -136,8 +138,10 @@ class DbiMysqli implements DbiExtension
              * - #2001 - SSL Connection is required. Please specify SSL options and retry.
              * - #9002 - SSL connection is required. Please specify SSL options and retry.
              */
+            // phpcs:disable Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
             $error_number = $mysqli->connect_errno;
             $error_message = $mysqli->connect_error;
+            // phpcs:enable
             if (
                 ! $server['ssl']
                 && ($error_number == 3159
@@ -153,14 +157,24 @@ class DbiMysqli implements DbiExtension
                 return self::connect($user, $password, $server);
             }
 
+            if ($error_number === 1045 && $server['hide_connection_errors']) {
+                trigger_error(
+                    sprintf(
+                        __(
+                            'Error 1045: Access denied for user. Additional error information'
+                            . ' may be available, but is being hidden by the %s configuration directive.'
+                        ),
+                        '[code][doc@cfg_Servers_hide_connection_errors]'
+                        . '$cfg[\'Servers\'][$i][\'hide_connection_errors\'][/doc][/code]'
+                    ),
+                    E_USER_ERROR
+                );
+            }
+
             return false;
         }
 
-        if (defined('PMA_ENABLE_LDI')) {
-            $mysqli->options(MYSQLI_OPT_LOCAL_INFILE, true);
-        } else {
-            $mysqli->options(MYSQLI_OPT_LOCAL_INFILE, false);
-        }
+        $mysqli->options(MYSQLI_OPT_LOCAL_INFILE, (int) defined('PMA_ENABLE_LDI'));
 
         return $mysqli;
     }
@@ -170,10 +184,8 @@ class DbiMysqli implements DbiExtension
      *
      * @param string|DatabaseName $databaseName database name to select
      * @param mysqli              $link         the mysqli object
-     *
-     * @return bool
      */
-    public function selectDb($databaseName, $link)
+    public function selectDb($databaseName, $link): bool
     {
         return $link->select_db((string) $databaseName);
     }
@@ -185,19 +197,21 @@ class DbiMysqli implements DbiExtension
      * @param mysqli $link    mysqli object
      * @param int    $options query options
      *
-     * @return mysqli_result|bool
+     * @return MysqliResult|false
      */
-    public function realQuery($query, $link, $options)
+    public function realQuery(string $query, $link, int $options)
     {
-        if ($options == ($options | DatabaseInterface::QUERY_STORE)) {
-            $method = MYSQLI_STORE_RESULT;
-        } elseif ($options == ($options | DatabaseInterface::QUERY_UNBUFFERED)) {
+        $method = MYSQLI_STORE_RESULT;
+        if ($options == ($options | DatabaseInterface::QUERY_UNBUFFERED)) {
             $method = MYSQLI_USE_RESULT;
-        } else {
-            $method = 0;
         }
 
-        return $link->query($query, $method);
+        $result = $link->query($query, $method);
+        if ($result === false) {
+            return false;
+        }
+
+        return new MysqliResult($result);
     }
 
     /**
@@ -205,93 +219,18 @@ class DbiMysqli implements DbiExtension
      *
      * @param mysqli $link  mysqli object
      * @param string $query multi query statement to execute
-     *
-     * @return bool
      */
-    public function realMultiQuery($link, $query)
+    public function realMultiQuery($link, $query): bool
     {
         return $link->multi_query($query);
-    }
-
-    /**
-     * returns array of rows with associative and numeric keys from $result
-     *
-     * @param mysqli_result $result result set identifier
-     */
-    public function fetchArray($result): ?array
-    {
-        if (! $result instanceof mysqli_result) {
-            return null;
-        }
-
-        return $result->fetch_array(MYSQLI_BOTH);
-    }
-
-    /**
-     * returns array of rows with associative keys from $result
-     *
-     * @param mysqli_result $result result set identifier
-     */
-    public function fetchAssoc($result): ?array
-    {
-        if (! $result instanceof mysqli_result) {
-            return null;
-        }
-
-        return $result->fetch_array(MYSQLI_ASSOC);
-    }
-
-    /**
-     * returns array of rows with numeric keys from $result
-     *
-     * @param mysqli_result $result result set identifier
-     */
-    public function fetchRow($result): ?array
-    {
-        if (! $result instanceof mysqli_result) {
-            return null;
-        }
-
-        return $result->fetch_array(MYSQLI_NUM);
-    }
-
-    /**
-     * Adjusts the result pointer to an arbitrary row in the result
-     *
-     * @param mysqli_result $result database result
-     * @param int           $offset offset to seek
-     *
-     * @return bool true on success, false on failure
-     */
-    public function dataSeek($result, $offset)
-    {
-        return $result->data_seek($offset);
-    }
-
-    /**
-     * Frees memory associated with the result
-     *
-     * @param mysqli_result $result database result
-     *
-     * @return void
-     */
-    public function freeResult($result)
-    {
-        if (! ($result instanceof mysqli_result)) {
-            return;
-        }
-
-        $result->close();
     }
 
     /**
      * Check if there are any more query results from a multi query
      *
      * @param mysqli $link the mysqli object
-     *
-     * @return bool true or false
      */
-    public function moreResults($link)
+    public function moreResults($link): bool
     {
         return $link->more_results();
     }
@@ -300,10 +239,8 @@ class DbiMysqli implements DbiExtension
      * Prepare next result from multi_query
      *
      * @param mysqli $link the mysqli object
-     *
-     * @return bool true or false
      */
-    public function nextResult($link)
+    public function nextResult($link): bool
     {
         return $link->next_result();
     }
@@ -313,11 +250,13 @@ class DbiMysqli implements DbiExtension
      *
      * @param mysqli $link the mysqli object
      *
-     * @return mysqli_result|bool false when empty results / result set when not empty
+     * @return MysqliResult|false false when empty results / result set when not empty
      */
     public function storeResult($link)
     {
-        return $link->store_result();
+        $result = $link->store_result();
+
+        return $result === false ? false : new MysqliResult($result);
     }
 
     /**
@@ -329,6 +268,7 @@ class DbiMysqli implements DbiExtension
      */
     public function getHostInfo($link)
     {
+        // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
         return $link->host_info;
     }
 
@@ -341,34 +281,26 @@ class DbiMysqli implements DbiExtension
      */
     public function getProtoInfo($link)
     {
+        // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
         return $link->protocol_version;
     }
 
     /**
      * returns a string that represents the client library version
      *
-     * @param mysqli $link mysql link
-     *
      * @return string MySQL client library version
      */
-    public function getClientInfo($link)
+    public function getClientInfo()
     {
-        // See: https://github.com/phpmyadmin/phpmyadmin/issues/16911
-        if (PHP_VERSION_ID < 80100) {
-            return $link->get_client_info();
-        }
-
         return mysqli_get_client_info();
     }
 
     /**
-     * returns last error message or false if no errors occurred
+     * Returns last error message or an empty string if no errors occurred.
      *
      * @param mysqli|false|null $link mysql link
-     *
-     * @return string|bool error or false
      */
-    public function getError($link)
+    public function getError($link): string
     {
         $GLOBALS['errno'] = 0;
 
@@ -381,7 +313,7 @@ class DbiMysqli implements DbiExtension
         }
 
         if ($error_number === 0 || $error_message === '') {
-            return false;
+            return '';
         }
 
         // keep the error number for further check after
@@ -392,115 +324,17 @@ class DbiMysqli implements DbiExtension
     }
 
     /**
-     * returns the number of rows returned by last query
-     *
-     * @param mysqli_result|bool $result result set identifier
-     *
-     * @return string|int
-     */
-    public function numRows($result)
-    {
-        // see the note for tryQuery();
-        if (is_bool($result)) {
-            return 0;
-        }
-
-        return $result->num_rows;
-    }
-
-    /**
      * returns the number of rows affected by last query
      *
      * @param mysqli $link the mysqli object
      *
-     * @return int
+     * @return int|string
+     * @psalm-return int|numeric-string
      */
     public function affectedRows($link)
     {
+        // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
         return $link->affected_rows;
-    }
-
-    /**
-     * returns meta info for fields in $result
-     *
-     * @param mysqli_result $result result set identifier
-     *
-     * @return FieldMetadata[]|null meta info for fields in $result
-     */
-    public function getFieldsMeta($result): ?array
-    {
-        if (! $result instanceof mysqli_result) {
-            return null;
-        }
-
-        $fields = $result->fetch_fields();
-        if (! is_array($fields)) {
-            return null;
-        }
-
-        foreach ($fields as $k => $field) {
-            $fields[$k] = new FieldMetadata($field->type, $field->flags, $field);
-        }
-
-        return $fields;
-    }
-
-    /**
-     * return number of fields in given $result
-     *
-     * @param mysqli_result $result result set identifier
-     *
-     * @return int field count
-     */
-    public function numFields($result)
-    {
-        return $result->field_count;
-    }
-
-    /**
-     * returns the length of the given field $i in $result
-     *
-     * @param mysqli_result $result result set identifier
-     * @param int           $i      field
-     *
-     * @return int|bool length of field
-     */
-    public function fieldLen($result, $i)
-    {
-        if ($i >= $this->numFields($result)) {
-            return false;
-        }
-
-        /** @var stdClass|false $fieldDefinition */
-        $fieldDefinition = $result->fetch_field_direct($i);
-        if ($fieldDefinition !== false) {
-            return $fieldDefinition->length;
-        }
-
-        return false;
-    }
-
-    /**
-     * returns name of $i. field in $result
-     *
-     * @param mysqli_result $result result set identifier
-     * @param int           $i      field
-     *
-     * @return string name of $i. field in $result
-     */
-    public function fieldName($result, $i)
-    {
-        if ($i >= $this->numFields($result)) {
-            return '';
-        }
-
-        /** @var stdClass|false $fieldDefinition */
-        $fieldDefinition = $result->fetch_field_direct($i);
-        if ($fieldDefinition !== false) {
-            return $fieldDefinition->name;
-        }
-
-        return '';
     }
 
     /**

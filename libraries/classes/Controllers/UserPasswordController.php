@@ -7,7 +7,7 @@ namespace PhpMyAdmin\Controllers;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Message;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\UserPassword;
 
@@ -24,22 +24,22 @@ class UserPasswordController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, UserPassword $userPassword, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        UserPassword $userPassword,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template);
         $this->userPassword = $userPassword;
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $cfg, $hostname, $username, $password, $change_password_message, $msg;
 
-        $this->addScriptFiles(['server/privileges.js', 'vendor/zxcvbn.js']);
+        $this->addScriptFiles(['server/privileges.js', 'vendor/zxcvbn-ts.js']);
 
         /**
          * Displays an error message and exits if the user isn't allowed to use this

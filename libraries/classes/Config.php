@@ -1,11 +1,10 @@
 <?php
-/**
- * Configuration handling.
- */
 
 declare(strict_types=1);
 
 namespace PhpMyAdmin;
+
+use PhpMyAdmin\Config\Settings;
 
 use function __;
 use function array_filter;
@@ -13,7 +12,6 @@ use function array_merge;
 use function array_replace_recursive;
 use function array_slice;
 use function count;
-use function define;
 use function defined;
 use function error_get_last;
 use function error_reporting;
@@ -26,6 +24,7 @@ use function fopen;
 use function fread;
 use function function_exists;
 use function gd_info;
+use function get_object_vars;
 use function implode;
 use function ini_get;
 use function intval;
@@ -35,7 +34,6 @@ use function is_numeric;
 use function is_readable;
 use function is_string;
 use function is_writable;
-use function max;
 use function mb_strstr;
 use function mb_strtolower;
 use function md5;
@@ -50,10 +48,10 @@ use function realpath;
 use function rtrim;
 use function setcookie;
 use function sprintf;
+use function str_contains;
 use function str_replace;
 use function stripos;
 use function strlen;
-use function strpos;
 use function strtolower;
 use function substr;
 use function sys_get_temp_dir;
@@ -70,13 +68,10 @@ use const PHP_URL_SCHEME;
 use const PHP_VERSION_ID;
 
 /**
- * Configuration class
+ * Configuration handling
  */
 class Config
 {
-    /** @var string  default config source */
-    public $defaultSource = ROOT_PATH . 'libraries/config.default.php';
-
     /** @var array   default configuration settings */
     public $default = [];
 
@@ -93,16 +88,10 @@ class Config
     public $sourceMtime = 0;
 
     /** @var int */
-    public $defaultSourceMtime = 0;
-
-    /** @var int */
     public $setMtime = 0;
 
     /** @var bool */
     public $errorConfigFile = false;
-
-    /** @var bool */
-    public $errorConfigDefaultFile = false;
 
     /** @var array */
     public $defaultServer = [];
@@ -205,95 +194,43 @@ class Config
         // 2. browser and version
         // (must check everything else before Mozilla)
 
-        $is_mozilla = preg_match(
-            '@Mozilla/([0-9]\.[0-9]{1,2})@',
-            $HTTP_USER_AGENT,
-            $mozilla_version
-        );
+        $is_mozilla = preg_match('@Mozilla/([0-9]\.[0-9]{1,2})@', $HTTP_USER_AGENT, $mozilla_version);
 
-        if (
-            preg_match(
-                '@Opera(/| )([0-9]\.[0-9]{1,2})@',
-                $HTTP_USER_AGENT,
-                $log_version
-            )
-        ) {
+        if (preg_match('@Opera(/| )([0-9]\.[0-9]{1,2})@', $HTTP_USER_AGENT, $log_version)) {
             $this->set('PMA_USR_BROWSER_VER', $log_version[2]);
             $this->set('PMA_USR_BROWSER_AGENT', 'OPERA');
-        } elseif (
-            preg_match(
-                '@(MS)?IE ([0-9]{1,2}\.[0-9]{1,2})@',
-                $HTTP_USER_AGENT,
-                $log_version
-            )
-        ) {
+        } elseif (preg_match('@(MS)?IE ([0-9]{1,2}\.[0-9]{1,2})@', $HTTP_USER_AGENT, $log_version)) {
             $this->set('PMA_USR_BROWSER_VER', $log_version[2]);
             $this->set('PMA_USR_BROWSER_AGENT', 'IE');
-        } elseif (
-            preg_match(
-                '@Trident/(7)\.0@',
-                $HTTP_USER_AGENT,
-                $log_version
-            )
-        ) {
+        } elseif (preg_match('@Trident/(7)\.0@', $HTTP_USER_AGENT, $log_version)) {
             $this->set('PMA_USR_BROWSER_VER', intval($log_version[1]) + 4);
             $this->set('PMA_USR_BROWSER_AGENT', 'IE');
-        } elseif (
-            preg_match(
-                '@OmniWeb/([0-9]{1,3})@',
-                $HTTP_USER_AGENT,
-                $log_version
-            )
-        ) {
+        } elseif (preg_match('@OmniWeb/([0-9]{1,3})@', $HTTP_USER_AGENT, $log_version)) {
             $this->set('PMA_USR_BROWSER_VER', $log_version[1]);
             $this->set('PMA_USR_BROWSER_AGENT', 'OMNIWEB');
             // Konqueror 2.2.2 says Konqueror/2.2.2
             // Konqueror 3.0.3 says Konqueror/3
-        } elseif (
-            preg_match(
-                '@(Konqueror/)(.*)(;)@',
-                $HTTP_USER_AGENT,
-                $log_version
-            )
-        ) {
+        } elseif (preg_match('@(Konqueror/)(.*)(;)@', $HTTP_USER_AGENT, $log_version)) {
             $this->set('PMA_USR_BROWSER_VER', $log_version[2]);
             $this->set('PMA_USR_BROWSER_AGENT', 'KONQUEROR');
             // must check Chrome before Safari
-        } elseif (
-            $is_mozilla
-            && preg_match('@Chrome/([0-9.]*)@', $HTTP_USER_AGENT, $log_version)
-        ) {
+        } elseif ($is_mozilla && preg_match('@Chrome/([0-9.]*)@', $HTTP_USER_AGENT, $log_version)) {
             $this->set('PMA_USR_BROWSER_VER', $log_version[1]);
             $this->set('PMA_USR_BROWSER_AGENT', 'CHROME');
             // newer Safari
-        } elseif (
-            $is_mozilla
-            && preg_match('@Version/(.*) Safari@', $HTTP_USER_AGENT, $log_version)
-        ) {
-            $this->set(
-                'PMA_USR_BROWSER_VER',
-                $log_version[1]
-            );
+        } elseif ($is_mozilla && preg_match('@Version/(.*) Safari@', $HTTP_USER_AGENT, $log_version)) {
+            $this->set('PMA_USR_BROWSER_VER', $log_version[1]);
             $this->set('PMA_USR_BROWSER_AGENT', 'SAFARI');
             // older Safari
-        } elseif (
-            $is_mozilla
-            && preg_match('@Safari/([0-9]*)@', $HTTP_USER_AGENT, $log_version)
-        ) {
-            $this->set(
-                'PMA_USR_BROWSER_VER',
-                $mozilla_version[1] . '.' . $log_version[1]
-            );
+        } elseif ($is_mozilla && preg_match('@Safari/([0-9]*)@', $HTTP_USER_AGENT, $log_version)) {
+            $this->set('PMA_USR_BROWSER_VER', $mozilla_version[1] . '.' . $log_version[1]);
             $this->set('PMA_USR_BROWSER_AGENT', 'SAFARI');
             // Firefox
         } elseif (
             ! mb_strstr($HTTP_USER_AGENT, 'compatible')
             && preg_match('@Firefox/([\w.]+)@', $HTTP_USER_AGENT, $log_version)
         ) {
-            $this->set(
-                'PMA_USR_BROWSER_VER',
-                $log_version[1]
-            );
+            $this->set('PMA_USR_BROWSER_VER', $log_version[1]);
             $this->set('PMA_USR_BROWSER_AGENT', 'FIREFOX');
         } elseif (preg_match('@rv:1\.9(.*)Gecko@', $HTTP_USER_AGENT)) {
             $this->set('PMA_USR_BROWSER_VER', '1.9');
@@ -385,54 +322,18 @@ class Config
 
     /**
      * loads default values from default source
-     *
-     * @return bool success
      */
-    public function loadDefaults(): bool
+    public function loadDefaults(): void
     {
-        global $isConfigLoading;
+        $settings = new Settings([]);
+        $cfg = $settings->toArray();
 
-        /** @var array<string,mixed> $cfg */
-        $cfg = [];
-        if (! @file_exists($this->defaultSource)) {
-            $this->errorConfigDefaultFile = true;
-
-            return false;
-        }
-
-        $canUseErrorReporting = Util::isErrorReportingAvailable();
-        $oldErrorReporting = null;
-        if ($canUseErrorReporting) {
-            $oldErrorReporting = error_reporting(0);
-        }
-
-        ob_start();
-        $isConfigLoading = true;
-        $eval_result = include $this->defaultSource;
-        $isConfigLoading = false;
-        ob_end_clean();
-
-        if ($canUseErrorReporting) {
-            error_reporting($oldErrorReporting);
-        }
-
-        if ($eval_result === false) {
-            $this->errorConfigDefaultFile = true;
-
-            return false;
-        }
-
-        $this->defaultSourceMtime = filemtime($this->defaultSource);
-
-        $this->defaultServer = $cfg['Servers'][1];
+        // phpcs:ignore Squiz.NamingConventions.ValidVariableName.MemberNotCamelCaps
+        $this->defaultServer = get_object_vars($settings->Servers[1]);
         unset($cfg['Servers']);
 
         $this->default = $cfg;
         $this->settings = array_replace_recursive($this->settings, $cfg);
-
-        $this->errorConfigDefaultFile = false;
-
-        return true;
     }
 
     /**
@@ -469,6 +370,7 @@ class Config
 
         ob_start();
         $isConfigLoading = true;
+        /** @psalm-suppress UnresolvableInclude */
         $eval_result = include $this->getSource();
         $isConfigLoading = false;
         ob_end_clean();
@@ -481,7 +383,7 @@ class Config
             $this->errorConfigFile = true;
         } else {
             $this->errorConfigFile = false;
-            $this->sourceMtime = filemtime($this->getSource());
+            $this->sourceMtime = (int) filemtime($this->getSource());
         }
 
         /**
@@ -498,7 +400,7 @@ class Config
         $cfg = array_filter(
             $cfg,
             static function (string $key): bool {
-                return strpos($key, '/') === false;
+                return ! str_contains($key, '/');
             },
             ARRAY_FILTER_USE_KEY
         );
@@ -516,10 +418,7 @@ class Config
         global $dbi;
 
         $collation_connection = $this->get('DefaultConnectionCollation');
-        if (
-            empty($collation_connection)
-            || $collation_connection == $GLOBALS['collation_connection']
-        ) {
+        if (empty($collation_connection) || $collation_connection == $GLOBALS['collation_connection']) {
             return;
         }
 
@@ -532,30 +431,28 @@ class Config
      */
     public function loadUserPreferences(): void
     {
-        $userPreferences = new UserPreferences();
+        global $isMinimumCommon;
+
         // index.php should load these settings, so that phpmyadmin.css.php
         // will have everything available in session cache
         $server = $GLOBALS['server'] ?? (! empty($GLOBALS['cfg']['ServerDefault'])
                 ? $GLOBALS['cfg']['ServerDefault']
                 : 0);
         $cache_key = 'server_' . $server;
-        if ($server > 0 && ! defined('PMA_MINIMUM_COMMON')) {
-            $config_mtime = max($this->defaultSourceMtime, $this->sourceMtime);
+        if ($server > 0 && ! isset($isMinimumCommon)) {
             // cache user preferences, use database only when needed
             if (
                 ! isset($_SESSION['cache'][$cache_key]['userprefs'])
-                || $_SESSION['cache'][$cache_key]['config_mtime'] < $config_mtime
+                || $_SESSION['cache'][$cache_key]['config_mtime'] < $this->sourceMtime
             ) {
+                $userPreferences = new UserPreferences();
                 $prefs = $userPreferences->load();
                 $_SESSION['cache'][$cache_key]['userprefs'] = $userPreferences->apply($prefs['config_data']);
                 $_SESSION['cache'][$cache_key]['userprefs_mtime'] = $prefs['mtime'];
                 $_SESSION['cache'][$cache_key]['userprefs_type'] = $prefs['type'];
-                $_SESSION['cache'][$cache_key]['config_mtime'] = $config_mtime;
+                $_SESSION['cache'][$cache_key]['config_mtime'] = $this->sourceMtime;
             }
-        } elseif (
-            $server == 0
-            || ! isset($_SESSION['cache'][$cache_key]['userprefs'])
-        ) {
+        } elseif ($server == 0 || ! isset($_SESSION['cache'][$cache_key]['userprefs'])) {
             $this->set('user_preferences', false);
 
             return;
@@ -563,19 +460,14 @@ class Config
 
         $config_data = $_SESSION['cache'][$cache_key]['userprefs'];
         // type is 'db' or 'session'
-        $this->set(
-            'user_preferences',
-            $_SESSION['cache'][$cache_key]['userprefs_type']
-        );
-        $this->set(
-            'user_preferences_mtime',
-            $_SESSION['cache'][$cache_key]['userprefs_mtime']
-        );
+        $this->set('user_preferences', $_SESSION['cache'][$cache_key]['userprefs_type']);
+        $this->set('user_preferences_mtime', $_SESSION['cache'][$cache_key]['userprefs_mtime']);
 
         // load config array
         $this->settings = array_replace_recursive($this->settings, $config_data);
         $GLOBALS['cfg'] = array_replace_recursive($GLOBALS['cfg'], $config_data);
-        if (defined('PMA_MINIMUM_COMMON')) {
+
+        if (isset($isMinimumCommon)) {
             return;
         }
 
@@ -584,7 +476,6 @@ class Config
         // in frames
 
         // save theme
-        /** @var ThemeManager $tmanager */
         $tmanager = ThemeManager::getInstance();
         if ($tmanager->getThemeCookie() || isset($_REQUEST['set_theme'])) {
             if (
@@ -593,7 +484,6 @@ class Config
                 || isset($config_data['ThemeDefault'])
                 && $config_data['ThemeDefault'] != $tmanager->theme->getId()
             ) {
-                // new theme was set in common.inc.php
                 $this->setUserValue(
                     null,
                     'ThemeDefault',
@@ -626,9 +516,7 @@ class Config
         } else {
             // read language from settings
             if (isset($config_data['lang'])) {
-                $language = LanguageManager::getInstance()->getLanguage(
-                    $config_data['lang']
-                );
+                $language = LanguageManager::getInstance()->getLanguage($config_data['lang']);
                 if ($language !== false) {
                     $language->activate();
                     $this->setCookie('pma_lang', $language->getCode());
@@ -725,8 +613,6 @@ class Config
 
     /**
      * check config source
-     *
-     * @return bool whether source is valid or not
      */
     public function checkConfigSource(): bool
     {
@@ -795,8 +681,7 @@ class Config
         $this->sourceMtime = 0;
         Core::fatalError(
             __(
-                'Wrong permissions on configuration file, '
-                . 'should not be world writable!'
+                'Wrong permissions on configuration file, should not be world writable!'
             )
         );
     }
@@ -807,25 +692,13 @@ class Config
      */
     public function checkErrors(): void
     {
-        if ($this->errorConfigDefaultFile) {
-            Core::fatalError(
-                sprintf(
-                    __('Could not load default configuration from: %1$s'),
-                    $this->defaultSource
-                )
-            );
-        }
-
         if (! $this->errorConfigFile) {
             return;
         }
 
         $error = '[strong]' . __('Failed to read configuration file!') . '[/strong]'
             . '[br][br]'
-            . __(
-                'This usually means there is a syntax error in it, '
-                . 'please check any errors shown below.'
-            )
+            . __('This usually means there is a syntax error in it, please check any errors shown below.')
             . '[br][br]'
             . '[conferr]';
         trigger_error($error, E_USER_ERROR);
@@ -855,10 +728,7 @@ class Config
      */
     public function set(string $setting, $value): void
     {
-        if (
-            isset($this->settings[$setting])
-            && $this->settings[$setting] === $value
-        ) {
+        if (isset($this->settings[$setting]) && $this->settings[$setting] === $value) {
             return;
         }
 
@@ -901,7 +771,7 @@ class Config
      * Maximum upload size as limited by PHP
      * Used with permission from Moodle (https://moodle.org/) by Martin Dougiamas
      *
-     * this section generates $max_upload_size in bytes
+     * this section generates max_upload_size in bytes
      */
     public function checkUploadSize(): void
     {
@@ -929,7 +799,7 @@ class Config
     public function isHttps(): bool
     {
         if ($this->get('is_https') !== null) {
-            return $this->get('is_https');
+            return (bool) $this->get('is_https');
         }
 
         $url = $this->get('PmaAbsoluteUri');
@@ -967,6 +837,8 @@ class Config
 
     /**
      * Get phpMyAdmin root path
+     *
+     * @staticvar string|null $cookie_path
      */
     public function getRootPath(): string
     {
@@ -1012,40 +884,9 @@ class Config
     }
 
     /**
-     * enables backward compatibility
-     */
-    public function enableBc(): void
-    {
-        $GLOBALS['cfg']             = $this->settings;
-        $GLOBALS['default_server']  = $this->defaultServer;
-        unset($this->defaultServer);
-        $GLOBALS['is_upload']       = $this->get('enable_upload');
-        $GLOBALS['max_upload_size'] = $this->get('max_upload_size');
-        $GLOBALS['is_https']        = $this->get('is_https');
-
-        $defines = [
-            'PMA_IS_WINDOWS',
-            'PMA_IS_GD2',
-            'PMA_USR_OS',
-            'PMA_USR_BROWSER_VER',
-            'PMA_USR_BROWSER_AGENT',
-        ];
-
-        foreach ($defines as $define) {
-            if (defined($define)) {
-                continue;
-            }
-
-            define($define, $this->get($define));
-        }
-    }
-
-    /**
      * removes cookie
      *
      * @param string $cookieName name of cookie to remove
-     *
-     * @return bool result of setcookie()
      */
     public function removeCookie(string $cookieName): bool
     {
@@ -1078,8 +919,6 @@ class Config
      * @param string $default  default value
      * @param int    $validity validity of cookie in seconds (default is one month)
      * @param bool   $httponly whether cookie is only for HTTP (and not for scripts)
-     *
-     * @return bool result of setcookie()
      */
     public function setCookie(
         string $cookie,
@@ -1090,9 +929,7 @@ class Config
     ): bool {
         global $cfg;
 
-        if (
-            strlen($value) > 0 && $default !== null && $value === $default
-        ) {
+        if (strlen($value) > 0 && $default !== null && $value === $default) {
             // default value is used
             if ($this->issetCookie($cookie)) {
                 // remove cookie
@@ -1149,11 +986,7 @@ class Config
                 'samesite' => $cfg['CookieSameSite'],
             ];
 
-            return setcookie(
-                $httpCookieName,
-                $value,
-                $optionalParams
-            );
+            return setcookie($httpCookieName, $value, $optionalParams);
         }
 
         // cookie has already $value as value
@@ -1190,8 +1023,6 @@ class Config
      * isset cookie
      *
      * @param string $cookieName The name of the cookie to check
-     *
-     * @return bool result of issetCookie()
      */
     public function issetCookie(string $cookieName): bool
     {
@@ -1235,7 +1066,7 @@ class Config
     {
         $retval = '';
         if (@file_exists($filename)) {
-            $retval .= '<div id="' . $id . '">';
+            $retval .= '<div id="' . $id . '" class="d-print-none">';
             ob_start();
             include $filename;
             $retval .= ob_get_clean();
@@ -1265,6 +1096,8 @@ class Config
      * Returns temporary dir path
      *
      * @param string $name Directory name
+     *
+     * @staticvar array<string,string|null> $temp_dir
      */
     public function getTempDir(string $name): ?string
     {
@@ -1439,6 +1272,8 @@ class Config
 
             $server = [];
 
+            $server['hide_connection_errors'] = $cfg['Server']['hide_connection_errors'];
+
             if (! empty($cfg['Server']['controlhost'])) {
                 $server['host'] = $cfg['Server']['controlhost'];
             } else {
@@ -1516,6 +1351,10 @@ class Config
 
         if (! isset($server['compress'])) {
             $server['compress'] = false;
+        }
+
+        if (! isset($server['hide_connection_errors'])) {
+            $server['hide_connection_errors'] = false;
         }
 
         return [

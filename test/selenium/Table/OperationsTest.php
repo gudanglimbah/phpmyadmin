@@ -1,7 +1,4 @@
 <?php
-/**
- * Selenium TestCase for table related tests
- */
 
 declare(strict_types=1);
 
@@ -9,12 +6,8 @@ namespace PhpMyAdmin\Tests\Selenium\Table;
 
 use PhpMyAdmin\Tests\Selenium\TestBase;
 
-use function sleep;
-
 /**
- * OperationsTest class
- *
- * @group      selenium
+ * @coversNothing
  */
 class OperationsTest extends TestBase
 {
@@ -48,15 +41,9 @@ class OperationsTest extends TestBase
         $this->byXPath("//a[contains(., 'Operations')]")->click();
 
         $this->waitAjax();
-        $this->waitForElement(
-            'xpath',
-            "//div[contains(., 'Table maintenance')]"
-        );
+        $this->waitForElement('xpath', "//div[contains(., 'Table maintenance')]");
         $this->reloadPage();
-        $this->waitForElement(
-            'xpath',
-            "//div[contains(., 'Table maintenance')]"
-        );
+        $this->waitForElement('xpath', "//div[contains(., 'Table maintenance')]");
     }
 
     /**
@@ -72,9 +59,7 @@ class OperationsTest extends TestBase
         );
 
         $this->byId('tableOrderDescRadio')->click();
-        $this->byCssSelector(
-            "form#alterTableOrderby input[type='submit']"
-        )->click();
+        $this->byCssSelector("form#alterTableOrderby input[type='submit']")->click();
 
         $this->waitAjax();
 
@@ -139,8 +124,6 @@ class OperationsTest extends TestBase
         $this->byName('comment')->sendKeys('foobar');
 
         $this->scrollIntoView('tableOptionsForm');
-        sleep(1);
-        $this->scrollIntoView('tableOptionsForm');
         $this->waitUntilElementIsVisible('cssSelector', 'form#tableOptionsForm', 30);
         $this->byCssSelector("form#tableOptionsForm input[type='submit']")->click();
         $this->waitAjax();
@@ -168,8 +151,6 @@ class OperationsTest extends TestBase
      */
     public function testCopyTable(): void
     {
-        $this->scrollIntoView('copyTable');
-        sleep(1);
         $this->scrollIntoView('copyTable');
         $this->waitUntilElementIsVisible('cssSelector', 'form#copyTable', 30);
         $this->byCssSelector("form#copyTable input[name='new_name']")->sendKeys('2');
@@ -202,8 +183,6 @@ class OperationsTest extends TestBase
     public function testTruncateTable(): void
     {
         $this->scrollToBottom();
-        sleep(1);
-        $this->scrollToBottom();
         $this->waitUntilElementIsVisible('id', 'drop_tbl_anchor', 30);
         $this->byId('truncate_tbl_anchor')->click();
         $this->byCssSelector('button.submitOK')->click();
@@ -211,8 +190,7 @@ class OperationsTest extends TestBase
 
         $this->waitForElement(
             'xpath',
-            "//div[@class='alert alert-success' and "
-            . "contains(., 'MySQL returned an empty result set')]"
+            '//div[@class=\'alert alert-success\' and contains(., \'MySQL returned an empty result set\')]'
         );
 
         $this->dbQuery(
@@ -233,22 +211,16 @@ class OperationsTest extends TestBase
     {
         $dropLink = $this->waitUntilElementIsVisible('partialLinkText', 'Delete the table (DROP)', 30);
         $this->scrollToBottom();
-        sleep(1);
-        $this->scrollToBottom();
         $dropLink->click();
         $this->byCssSelector('button.submitOK')->click();
         $this->waitAjax();
 
         $this->waitForElement(
             'xpath',
-            "//div[@class='alert alert-success' and "
-            . "contains(., 'MySQL returned an empty result set')]"
+            '//div[@class=\'alert alert-success\' and contains(., \'MySQL returned an empty result set\')]'
         );
 
-        $this->waitForElement(
-            'xpath',
-            "//a[@class='nav-link text-nowrap' and contains(., 'Structure')]"
-        );
+        $this->waitForElement('xpath', "//a[@class='nav-link text-nowrap' and contains(., 'Structure')]");
 
         $this->dbQuery(
             'USE `' . $this->databaseName . '`;'

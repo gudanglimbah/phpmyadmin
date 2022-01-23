@@ -24,13 +24,10 @@ class ImportXmlTest extends AbstractTestCase
     /**
      * Sets up the fixture, for example, opens a network connection.
      * This method is called before a test is executed.
-     *
-     * @access protected
      */
     protected function setUp(): void
     {
         parent::setUp();
-        parent::loadDefaultConfig();
         $GLOBALS['server'] = 0;
 
         $this->object = new ImportXml();
@@ -41,8 +38,7 @@ class ImportXmlTest extends AbstractTestCase
         $GLOBALS['offset'] = 0;
         $GLOBALS['cfg']['Server']['DisableIS'] = false;
 
-        $GLOBALS['import_file'] = 'test/test_data/phpmyadmin_importXML_'
-            . 'For_Testing.xml';
+        $GLOBALS['import_file'] = 'test/test_data/phpmyadmin_importXML_For_Testing.xml';
         $GLOBALS['import_text'] = 'ImportXml_Test';
         $GLOBALS['compression'] = 'none';
         $GLOBALS['read_multiply'] = 10;
@@ -52,8 +48,6 @@ class ImportXmlTest extends AbstractTestCase
     /**
      * Tears down the fixture, for example, closes a network connection.
      * This method is called after a test is executed.
-     *
-     * @access protected
      */
     protected function tearDown(): void
     {
@@ -81,10 +75,7 @@ class ImportXmlTest extends AbstractTestCase
             'text/xml',
             $properties->getMimeType()
         );
-        $this->assertEquals(
-            [],
-            $properties->getOptions()
-        );
+        $this->assertNull($properties->getOptions());
         $this->assertEquals(
             __('Options'),
             $properties->getOptionsText()
@@ -95,6 +86,7 @@ class ImportXmlTest extends AbstractTestCase
      * Test for doImport
      *
      * @group medium
+     * @requires extension simplexml
      */
     public function testDoImport(): void
     {
@@ -131,24 +123,10 @@ class ImportXmlTest extends AbstractTestCase
             'The following structures have either been created or altered.',
             $import_notice
         );
-        $this->assertStringContainsString(
-            'Go to database: `phpmyadmintest`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Edit settings for `phpmyadmintest`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Go to table: `pma_bookmarktest`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Edit settings for `pma_bookmarktest`',
-            $import_notice
-        );
-        $this->assertTrue(
-            $GLOBALS['finished']
-        );
+        $this->assertStringContainsString('Go to database: `phpmyadmintest`', $import_notice);
+        $this->assertStringContainsString('Edit settings for `phpmyadmintest`', $import_notice);
+        $this->assertStringContainsString('Go to table: `pma_bookmarktest`', $import_notice);
+        $this->assertStringContainsString('Edit settings for `pma_bookmarktest`', $import_notice);
+        $this->assertTrue($GLOBALS['finished']);
     }
 }

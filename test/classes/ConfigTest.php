@@ -5,16 +5,15 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Tests;
 
 use PhpMyAdmin\Config;
+use PhpMyAdmin\Config\Settings;
 use PhpMyAdmin\DatabaseInterface;
 
 use function array_merge;
 use function array_replace_recursive;
-use function constant;
 use function define;
 use function defined;
 use function file_exists;
 use function file_put_contents;
-use function filemtime;
 use function fileperms;
 use function function_exists;
 use function gd_info;
@@ -240,8 +239,7 @@ class ConfigTest extends AbstractTestCase
                 '9.80',
             ],
             [
-                'Mozilla/5.0 (Macintosh; U; Intel Mac OS X; en-US) AppleWebKit/'
-                . '528.16 OmniWeb/622.8.0.112941',
+                'Mozilla/5.0 (Macintosh; U; Intel Mac OS X; en-US) AppleWebKit/528.16 OmniWeb/622.8.0.112941',
                 'Mac',
                 'OMNIWEB',
                 '622',
@@ -259,15 +257,13 @@ class ConfigTest extends AbstractTestCase
                 '9.0',
             ],
             [
-                'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; Win64; x64; '
-                . 'Trident/6.0)',
+                'Mozilla/5.0 (compatible; MSIE 10.0; Windows NT 6.2; Win64; x64; Trident/6.0)',
                 'Win',
                 'IE',
                 '10.0',
             ],
             [
-                'Mozilla/5.0 (IE 11.0; Windows NT 6.3; Trident/7.0; .NET4.0E; '
-                . '.NET4.0C; rv:11.0) like Gecko',
+                'Mozilla/5.0 (IE 11.0; Windows NT 6.3; Trident/7.0; .NET4.0E; .NET4.0C; rv:11.0) like Gecko',
                 'Win',
                 'IE',
                 '11.0',
@@ -301,8 +297,7 @@ class ConfigTest extends AbstractTestCase
                 '1.9',
             ],
             [
-                'Mozilla/5.0 (compatible; Konqueror/4.5; NetBSD 5.0.2; X11; '
-                . 'amd64; en_US) KHTML/4.5.4 (like Gecko)',
+                'Mozilla/5.0 (compatible; Konqueror/4.5; NetBSD 5.0.2; X11; amd64; en_US) KHTML/4.5.4 (like Gecko)',
                 'Other',
                 'KONQUEROR',
             ],
@@ -313,8 +308,7 @@ class ConfigTest extends AbstractTestCase
                 '5.0',
             ],
             [
-                'Mozilla/5.0 (X11; Linux x86_64; rv:12.0) Gecko/20100101 '
-                . 'Firefox/12.0',
+                'Mozilla/5.0 (X11; Linux x86_64; rv:12.0) Gecko/20100101 Firefox/12.0',
                 'Linux',
                 'FIREFOX',
                 '12.0',
@@ -337,8 +331,6 @@ class ConfigTest extends AbstractTestCase
      */
     public function testCheckGd2(): void
     {
-        $prevIsGb2Val = $this->object->get('PMA_IS_GD2');
-
         $this->object->set('GD2Available', 'yes');
         $this->object->checkGd2();
         $this->assertEquals(1, $this->object->get('PMA_IS_GD2'));
@@ -470,46 +462,23 @@ class ConfigTest extends AbstractTestCase
      */
     public function testLoadDefaults(): void
     {
-        $prevDefaultSource = $this->object->defaultSource;
+        $this->object->defaultServer = [];
+        $this->object->default = [];
+        $this->object->settings = ['is_setup' => false, 'AvailableCharsets' => ['test']];
 
-        $this->object->defaultSource = 'unexisted.file.php';
-        $this->assertFalse($this->object->loadDefaults());
+        $this->object->loadDefaults();
 
-        $this->object->defaultSource = $prevDefaultSource;
+        $settings = new Settings([]);
+        $config = $settings->toArray();
 
-        /** @var array<string,mixed> $cfg */
-        $cfg = [];
-        include $this->object->defaultSource;
-        $loadedConf = $cfg;
-        unset($cfg);
-
-        $this->assertTrue($this->object->loadDefaults());
-
+        $this->assertIsArray($config['Servers']);
+        $this->assertEquals($config['Servers'][1], $this->object->defaultServer);
+        unset($config['Servers']);
+        $this->assertEquals($config, $this->object->default);
         $this->assertEquals(
-            $this->object->defaultSourceMtime,
-            filemtime($prevDefaultSource)
+            array_replace_recursive(['is_setup' => false, 'AvailableCharsets' => ['test']], $config),
+            $this->object->settings
         );
-        $this->assertEquals(
-            $loadedConf['Servers'][1],
-            $this->object->defaultServer
-        );
-
-        unset($loadedConf['Servers']);
-
-        $this->assertEquals($loadedConf, $this->object->default);
-
-        $expectedSettings = array_replace_recursive(
-            $this->object->settings,
-            $loadedConf
-        );
-
-        $this->assertEquals(
-            $expectedSettings,
-            $this->object->settings,
-            'Settings loaded wrong'
-        );
-
-        $this->assertFalse($this->object->errorConfigDefaultFile);
     }
 
     /**
@@ -521,7 +490,7 @@ class ConfigTest extends AbstractTestCase
         $this->assertFalse($this->object->checkConfigSource());
         $this->assertEquals(0, $this->object->sourceMtime);
 
-        $this->object->setSource(ROOT_PATH . 'libraries/config.default.php');
+        $this->object->setSource(ROOT_PATH . 'test/test_data/config.inc.php');
 
         $this->assertNotEmpty($this->object->getSource());
         $this->assertTrue($this->object->checkConfigSource());
@@ -822,32 +791,6 @@ class ConfigTest extends AbstractTestCase
     }
 
     /**
-     * Test for backward compatibility globals
-     *
-     * @depends testCheckSystem
-     * @depends testCheckWebServer
-     * @depends testLoadDefaults
-     * @group large
-     */
-    public function testEnableBc(): void
-    {
-        $this->object->enableBc();
-
-        $defines = [
-            'PMA_IS_WINDOWS',
-            'PMA_IS_GD2',
-            'PMA_USR_OS',
-            'PMA_USR_BROWSER_VER',
-            'PMA_USR_BROWSER_AGENT',
-        ];
-
-        foreach ($defines as $define) {
-            $this->assertTrue(defined($define));
-            $this->assertEquals(constant($define), $this->object->get($define));
-        }
-    }
-
-    /**
      * Test for getting root path
      *
      * @param string $request  The request URL used for phpMyAdmin
@@ -987,10 +930,6 @@ class ConfigTest extends AbstractTestCase
                 ROOT_PATH . 'test/test_data/config-nonexisting.inc.php',
                 false,
             ],
-            [
-                ROOT_PATH . 'libraries/config.default.php',
-                true,
-            ],
         ];
     }
 
@@ -1129,11 +1068,7 @@ class ConfigTest extends AbstractTestCase
     {
         $this->object->settings['Servers'] = $settings;
         $this->object->checkServers();
-        if ($expected === null) {
-            $expected = $this->object->defaultServer;
-        } else {
-            $expected = array_merge($this->object->defaultServer, $expected);
-        }
+        $expected = array_merge($this->object->defaultServer, $expected);
 
         $this->assertEquals($expected, $this->object->settings['Servers'][1]);
     }

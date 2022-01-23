@@ -21,7 +21,7 @@ use function substr;
 
 class ChangeLogController extends AbstractController
 {
-    public function index(): void
+    public function __invoke(): void
     {
         $this->response->disable();
         $this->response->getHeader()->sendHttpHeaders();
@@ -35,8 +35,7 @@ class ChangeLogController extends AbstractController
         if (! @is_readable($filename)) {
             printf(
                 __(
-                    'The %s file is not available on this system, please visit ' .
-                    '%s for more information.'
+                    'The %s file is not available on this system, please visit %s for more information.'
                 ),
                 $filename,
                 '<a href="https://www.phpmyadmin.net/">phpmyadmin.net</a>'

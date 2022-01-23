@@ -7,7 +7,7 @@ namespace PhpMyAdmin\Database;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Message;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Util;
 
@@ -16,9 +16,9 @@ use function count;
 use function explode;
 use function htmlspecialchars;
 use function in_array;
-use function mb_strpos;
 use function mb_strtoupper;
 use function sprintf;
+use function str_contains;
 use function trim;
 
 /**
@@ -38,13 +38,13 @@ class Triggers
     /** @var Template */
     private $template;
 
-    /** @var Response */
+    /** @var ResponseRenderer */
     private $response;
 
     /**
      * @param DatabaseInterface $dbi      DatabaseInterface instance.
      * @param Template          $template Template instance.
-     * @param Response          $response Response instance.
+     * @param ResponseRenderer  $response Response instance.
      */
     public function __construct(DatabaseInterface $dbi, Template $template, $response)
     {
@@ -55,10 +55,8 @@ class Triggers
 
     /**
      * Main function for the triggers functionality
-     *
-     * @return void
      */
-    public function main()
+    public function main(): void
     {
         global $db, $table;
 
@@ -95,17 +93,12 @@ class Triggers
 
     /**
      * Handles editor requests for adding or editing an item
-     *
-     * @return void
      */
-    public function handleEditor()
+    public function handleEditor(): void
     {
         global $db, $errors, $message, $table;
 
-        if (
-            ! empty($_POST['editor_process_add'])
-            || ! empty($_POST['editor_process_edit'])
-        ) {
+        if (! empty($_POST['editor_process_add']) || ! empty($_POST['editor_process_edit'])) {
             $sql_query = '';
 
             $item_query = $this->getQueryFromRequest();
@@ -139,7 +132,9 @@ class Triggers
                             // new one. Try to restore the backup query.
                             $result = $this->dbi->tryQuery($create_item);
 
-                            $errors = $this->checkResult($result, $create_item, $errors);
+                            if (! $result) {
+                                $errors = $this->checkResult($create_item, $errors);
+                            }
                         } else {
                             $message = Message::success(
                                 __('Trigger %1$s has been modified.')
@@ -203,10 +198,7 @@ class Triggers
                     }
 
                     $insert = false;
-                    if (
-                        empty($table)
-                        || ($trigger !== false && $table == $trigger['table'])
-                    ) {
+                    if (empty($table) || ($trigger !== false && $table == $trigger['table'])) {
                         $insert = true;
                         $hasTriggerPrivilege = Util::currentUserHasPrivilege('TRIGGER', $db, $table);
                         $this->response->addJSON(
@@ -265,10 +257,7 @@ class Triggers
             $mode = 'add';
         } elseif (! empty($_REQUEST['edit_item'])) {
             $title = __('Edit trigger');
-            if (
-                ! empty($_REQUEST['item_name'])
-                && empty($_POST['editor_process_edit'])
-            ) {
+            if (! empty($_REQUEST['item_name']) && empty($_POST['editor_process_edit'])) {
                 $item = $this->getDataFromName($_REQUEST['item_name']);
                 if ($item !== null) {
                     $item['item_original_name'] = $item['item_name'];
@@ -280,7 +269,7 @@ class Triggers
             $mode = 'edit';
         }
 
-        $this->sendEditor($mode, $item, $title, $db);
+        $this->sendEditor($mode, $item, $title, $db, $table);
     }
 
     /**
@@ -334,14 +323,14 @@ class Triggers
         }
 
         $retval = [];
-        $retval['create']                  = $temp['create'];
-        $retval['drop']                    = $temp['drop'];
-        $retval['item_name']               = $temp['name'];
-        $retval['item_table']              = $temp['table'];
-        $retval['item_action_timing']      = $temp['action_timing'];
+        $retval['create'] = $temp['create'];
+        $retval['drop'] = $temp['drop'];
+        $retval['item_name'] = $temp['name'];
+        $retval['item_table'] = $temp['table'];
+        $retval['item_action_timing'] = $temp['action_timing'];
         $retval['item_event_manipulation'] = $temp['event_manipulation'];
-        $retval['item_definition']         = $temp['definition'];
-        $retval['item_definer']            = $temp['definer'];
+        $retval['item_definition'] = $temp['definition'];
+        $retval['item_definer'] = $temp['definer'];
 
         return $retval;
     }
@@ -384,9 +373,7 @@ class Triggers
 
         $query = 'CREATE ';
         if (! empty($_POST['item_definer'])) {
-            if (
-                mb_strpos($_POST['item_definer'], '@') !== false
-            ) {
+            if (str_contains($_POST['item_definer'], '@')) {
                 $arr = explode('@', $_POST['item_definer']);
                 $query .= 'DEFINER=' . Util::backquote($arr[0]);
                 $query .= '@' . Util::backquote($arr[1]) . ' ';
@@ -402,29 +389,20 @@ class Triggers
             $errors[] = __('You must provide a trigger name!');
         }
 
-        if (
-            ! empty($_POST['item_timing'])
-            && in_array($_POST['item_timing'], $this->time)
-        ) {
+        if (! empty($_POST['item_timing']) && in_array($_POST['item_timing'], $this->time)) {
             $query .= $_POST['item_timing'] . ' ';
         } else {
             $errors[] = __('You must provide a valid timing for the trigger!');
         }
 
-        if (
-            ! empty($_POST['item_event'])
-            && in_array($_POST['item_event'], $this->event)
-        ) {
+        if (! empty($_POST['item_event']) && in_array($_POST['item_event'], $this->event)) {
             $query .= $_POST['item_event'] . ' ';
         } else {
             $errors[] = __('You must provide a valid event for the trigger!');
         }
 
         $query .= 'ON ';
-        if (
-            ! empty($_POST['item_table'])
-            && in_array($_POST['item_table'], $this->dbi->getTables($db))
-        ) {
+        if (! empty($_POST['item_table']) && in_array($_POST['item_table'], $this->dbi->getTables($db))) {
             $query .= Util::backquote($_POST['item_table']);
         } else {
             $errors[] = __('You must provide a valid table name!');
@@ -441,18 +419,13 @@ class Triggers
     }
 
     /**
-     * @param resource|bool $result          Query result
-     * @param string        $createStatement Query
-     * @param array         $errors          Errors
+     * @param string $createStatement Query
+     * @param array  $errors          Errors
      *
      * @return array
      */
-    private function checkResult($result, $createStatement, array $errors)
+    private function checkResult($createStatement, array $errors)
     {
-        if ($result) {
-            return $errors;
-        }
-
         // OMG, this is really bad! We dropped the query,
         // failed to create a new one
         // and now even the backup query does not execute!
@@ -473,13 +446,10 @@ class Triggers
      * @param array|null $item  Data necessary to create the editor
      * @param string     $title Title of the editor
      * @param string     $db    Database
-     *
-     * @return void
+     * @param string     $table Table
      */
-    private function sendEditor($mode, ?array $item, $title, $db)
+    private function sendEditor($mode, ?array $item, $title, $db, $table): void
     {
-        global $db, $table;
-
         if ($item !== null) {
             $editor = $this->getEditorForm($db, $table, $mode, $item);
             if ($this->response->isAjax()) {
@@ -493,7 +463,7 @@ class Triggers
             exit;
         }
 
-        $message  = __('Error in processing request:') . ' ';
+        $message = __('Error in processing request:') . ' ';
         $message .= sprintf(
             __('No trigger with name %1$s found in database %2$s.'),
             htmlspecialchars(Util::backquote($_REQUEST['item_name'])),

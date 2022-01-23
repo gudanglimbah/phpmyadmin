@@ -15,8 +15,8 @@ use function count;
 use function gmdate;
 use function implode;
 use function is_array;
-use function mb_strpos;
 use function preg_replace;
+use function str_contains;
 use function strtr;
 use function var_export;
 
@@ -72,7 +72,7 @@ class ConfigGenerator
 
         // keep 1d array keys which are present in $persist_keys (config.values.php)
         foreach (array_keys($persistKeys) as $k) {
-            if (mb_strpos($k, '/') !== false) {
+            if (str_contains($k, '/')) {
                 continue;
             }
 
@@ -120,10 +120,8 @@ class ConfigGenerator
      * Check whether $array is a continuous 0-based array
      *
      * @param array $array Array to check
-     *
-     * @return bool
      */
-    private static function isZeroBasedArray(array $array)
+    private static function isZeroBasedArray(array $array): bool
     {
         for ($i = 0, $nb = count($array); $i < $nb; $i++) {
             if (! isset($array[$i])) {

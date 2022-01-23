@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin;
 
+use PhpMyAdmin\Dbal\ResultInterface;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Html\MySQLDocumentation;
 use PhpMyAdmin\Query\Utilities;
@@ -11,7 +12,7 @@ use PhpMyAdmin\SqlParser\Components\Expression;
 use PhpMyAdmin\SqlParser\Context;
 use PhpMyAdmin\SqlParser\Token;
 use PhpMyAdmin\Utils\SessionCache;
-use phpseclib3\Crypt\Random;
+use Stringable;
 
 use function __;
 use function _pgettext;
@@ -24,12 +25,10 @@ use function array_unique;
 use function basename;
 use function bin2hex;
 use function chr;
-use function class_exists;
 use function count;
 use function ctype_digit;
 use function date;
 use function decbin;
-use function defined;
 use function explode;
 use function extension_loaded;
 use function fclose;
@@ -47,6 +46,7 @@ use function ini_get;
 use function is_array;
 use function is_callable;
 use function is_object;
+use function is_scalar;
 use function is_string;
 use function log10;
 use function mb_detect_encoding;
@@ -59,10 +59,10 @@ use function mb_substr;
 use function number_format;
 use function ord;
 use function parse_url;
-use function pow;
 use function preg_match;
 use function preg_quote;
 use function preg_replace;
+use function random_bytes;
 use function range;
 use function reset;
 use function round;
@@ -70,12 +70,12 @@ use function rtrim;
 use function set_time_limit;
 use function sort;
 use function sprintf;
+use function str_contains;
 use function str_pad;
 use function str_replace;
 use function strcasecmp;
 use function strftime;
 use function strlen;
-use function strpos;
 use function strrev;
 use function strtolower;
 use function strtr;
@@ -88,7 +88,6 @@ use const ENT_COMPAT;
 use const ENT_QUOTES;
 use const PHP_INT_SIZE;
 use const PHP_MAJOR_VERSION;
-use const PREG_OFFSET_CAPTURE;
 use const STR_PAD_LEFT;
 
 /**
@@ -100,8 +99,6 @@ class Util
      * Checks whether configuration value tells to show icons.
      *
      * @param string $value Configuration option name
-     *
-     * @return bool Whether to show icons.
      */
     public static function showIcons($value): bool
     {
@@ -112,8 +109,6 @@ class Util
      * Checks whether configuration value tells to show text.
      *
      * @param string $value Configuration option name
-     *
-     * @return bool Whether to show text.
      */
     public static function showText($value): bool
     {
@@ -126,8 +121,6 @@ class Util
      * @param int|float|string $maxUploadSize the size
      *
      * @return string the message
-     *
-     * @access public
      */
     public static function getFormattedMaximumUploadSize($maxUploadSize): string
     {
@@ -146,8 +139,6 @@ class Util
      * @param string $name the string to escape
      *
      * @return string the escaped string
-     *
-     * @access public
      */
     public static function escapeMysqlWildcards($name): string
     {
@@ -161,8 +152,6 @@ class Util
      * @param string $name the string to escape
      *
      * @return string the escaped string
-     *
-     * @access public
      */
     public static function unescapeMysqlWildcards($name): string
     {
@@ -192,17 +181,10 @@ class Util
         }
 
         foreach ($quotes as $quote) {
-            if (
-                mb_substr($quotedString, 0, 1) === $quote
-                && mb_substr($quotedString, -1, 1) === $quote
-            ) {
+            if (mb_substr($quotedString, 0, 1) === $quote && mb_substr($quotedString, -1, 1) === $quote) {
                 $unquotedString = mb_substr($quotedString, 1, -1);
                 // replace escaped quotes
-                $unquotedString = str_replace(
-                    $quote . $quote,
-                    $quote,
-                    $unquotedString
-                );
+                $unquotedString = str_replace($quote . $quote, $quote, $unquotedString);
 
                 return $unquotedString;
             }
@@ -218,8 +200,6 @@ class Util
      * @param string $anchor anchor to page part
      *
      * @return string  the URL link
-     *
-     * @access public
      */
     public static function getMySQLDocuURL(string $link, string $anchor = ''): string
     {
@@ -336,9 +316,9 @@ class Util
         }
 
         $default = [
-            'Name'      => '',
-            'Rows'      => 0,
-            'Comment'   => '',
+            'Name' => '',
+            'Rows' => 0,
+            'Comment' => '',
             'disp_name' => '',
         ];
 
@@ -349,10 +329,7 @@ class Util
 
             // in $group we save the reference to the place in $table_groups
             // where to store the table info
-            if (
-                $GLOBALS['cfg']['NavigationTreeEnableGrouping']
-                && $sep && mb_strstr($tableName, $sep)
-            ) {
+            if ($GLOBALS['cfg']['NavigationTreeEnableGrouping'] && $sep && mb_strstr($tableName, $sep)) {
                 $parts = explode($sep, $tableName);
 
                 $group =& $tableGroups;
@@ -360,10 +337,7 @@ class Util
                 $groupNameFull = '';
                 $partsCount = count($parts) - 1;
 
-                while (
-                    ($i < $partsCount)
-                    && ($i < $GLOBALS['cfg']['NavigationTreeTableLevel'])
-                ) {
+                while (($i < $partsCount) && ($i < $GLOBALS['cfg']['NavigationTreeTableLevel'])) {
                     $groupName = $parts[$i] . $sep;
                     $groupNameFull .= $groupName;
 
@@ -413,16 +387,11 @@ class Util
      *
      * </code>
      *
-     * @param array|string $aName the database, table or field name to "backquote" or array of it
-     * @param bool         $doIt  a flag to bypass this function (used by dump functions)
-     *
-     * @return mixed the "backquoted" database, table or field name
-     *
-     * @access public
+     * @param Stringable|string|null $identifier the database, table or field name to "backquote"
      */
-    public static function backquote($aName, $doIt = true)
+    public static function backquote($identifier): string
     {
-        return static::backquoteCompat($aName, 'NONE', $doIt);
+        return static::backquoteCompat($identifier, 'NONE', true);
     }
 
     /**
@@ -435,51 +404,32 @@ class Util
      *
      * </code>
      *
-     * @param array|string $aName         the database, table or field name to "backquote" or array of it
-     * @param string       $compatibility string compatibility mode (used by dump functions)
-     * @param bool         $doIt          a flag to bypass this function (used by dump functions)
-     *
-     * @return mixed the "backquoted" database, table or field name
-     *
-     * @access public
+     * @param Stringable|string|null $identifier    the database, table or field name to "backquote"
+     * @param string                 $compatibility string compatibility mode (used by dump functions)
+     * @param bool|null              $doIt          a flag to bypass this function (used by dump functions)
      */
     public static function backquoteCompat(
-        $aName,
+        $identifier,
         string $compatibility = 'MSSQL',
         $doIt = true
-    ) {
-        if (is_array($aName)) {
-            foreach ($aName as &$data) {
-                $data = self::backquoteCompat($data, $compatibility, $doIt);
-            }
-
-            return $aName;
+    ): string {
+        $identifier = (string) $identifier;
+        if ($identifier === '' || $identifier === '*') {
+            return $identifier;
         }
 
-        if (! $doIt) {
-            if (! (Context::isKeyword($aName) & Token::FLAG_KEYWORD_RESERVED)) {
-                return $aName;
-            }
+        if (! $doIt && ! ((int) Context::isKeyword($identifier) & Token::FLAG_KEYWORD_RESERVED)) {
+            return $identifier;
         }
 
-        // @todo add more compatibility cases (ORACLE for example)
-        switch ($compatibility) {
-            case 'MSSQL':
-                $quote = '"';
-                $escapeChar = '\\';
-                break;
-            default:
-                $quote = '`';
-                $escapeChar = '`';
-                break;
+        $quote = '`';
+        $escapeChar = '`';
+        if ($compatibility === 'MSSQL') {
+            $quote = '"';
+            $escapeChar = '\\';
         }
 
-        // '0' is also empty for php :-(
-        if (strlen((string) $aName) > 0 && $aName !== '*') {
-            return $quote . str_replace($quote, $escapeChar . $quote, (string) $aName) . $quote;
-        }
-
-        return $aName;
+        return $quote . str_replace($quote, $escapeChar . $quote, $identifier) . $quote;
     }
 
     /**
@@ -490,8 +440,6 @@ class Util
      * @param int                   $comma the number of decimals to retain
      *
      * @return array|null the formatted value and its unit
-     *
-     * @access public
      */
     public static function formatByteDown($value, $limes = 6, $comma = 0): ?array
     {
@@ -520,15 +468,15 @@ class Util
             __('EiB'),
         ];
 
-        $dh = pow(10, $comma);
-        $li = pow(10, $limes);
+        $dh = 10 ** $comma;
+        $li = 10 ** $limes;
         $unit = $byteUnits[0];
 
         for ($d = 6, $ex = 15; $d >= 1; $d--, $ex -= 3) {
-            $unitSize = $li * pow(10, $ex);
+            $unitSize = $li * 10 ** $ex;
             if (isset($byteUnits[$d]) && $value >= $unitSize) {
                 // use 1024.0 to avoid integer overflow on 64-bit machines
-                $value = round($value / (pow(1024, $d) / $dh)) / $dh;
+                $value = round($value / (1024 ** $d / $dh)) / $dh;
                 $unit = $byteUnits[$d];
                 break 1;
             }
@@ -572,8 +520,6 @@ class Util
      * @param bool             $noTrailingZero removes trailing zeros right of the comma (default: true)
      *
      * @return string   the formatted value and its unit
-     *
-     * @access public
      */
     public static function formatNumber(
         $value,
@@ -602,7 +548,7 @@ class Util
                 __(',')
             );
             if (($originalValue != 0) && (floatval($value) == 0)) {
-                $value = ' <' . (1 / pow(10, $digitsRight));
+                $value = ' <' . (1 / 10 ** $digitsRight);
             }
 
             return $value;
@@ -641,7 +587,7 @@ class Util
             $sign = '';
         }
 
-        $dh = pow(10, $digitsRight);
+        $dh = 10 ** $digitsRight;
 
         /*
          * This gives us the right SI prefix already,
@@ -653,7 +599,7 @@ class Util
          * So if we have 3,6,9,12.. free digits ($digits_left - $cur_digits)
          * to use, then lower the SI prefix
          */
-        $curDigits = floor(log10($value / pow(1000, $d)) + 1);
+        $curDigits = floor(log10($value / 1000 ** $d) + 1);
         if ($digitsLeft > $curDigits) {
             $d -= floor(($digitsLeft - $curDigits) / 3);
         }
@@ -662,29 +608,18 @@ class Util
             $d = 0;
         }
 
-        $value = round($value / (pow(1000, $d) / $dh)) / $dh;
+        $value = round($value / (1000 ** $d / $dh)) / $dh;
         $unit = $units[$d];
 
         // number_format is not multibyte safe, str_replace is safe
-        $formattedValue = number_format(
-            $value,
-            $digitsRight,
-            $decimalSep,
-            $thousandsSep
-        );
+        $formattedValue = number_format($value, $digitsRight, $decimalSep, $thousandsSep);
         // If we don't want any zeros, remove them now
-        if ($noTrailingZero && strpos($formattedValue, $decimalSep) !== false) {
+        if ($noTrailingZero && str_contains($formattedValue, $decimalSep)) {
             $formattedValue = preg_replace('/' . preg_quote($decimalSep, '/') . '?0+$/', '', $formattedValue);
         }
 
         if ($originalValue != 0 && floatval($value) == 0) {
-            return ' <' . number_format(
-                1 / pow(10, $digitsRight),
-                $digitsRight,
-                $decimalSep,
-                $thousandsSep
-            )
-            . ' ' . $unit;
+            return ' <' . number_format(1 / 10 ** $digitsRight, $digitsRight, $decimalSep, $thousandsSep) . ' ' . $unit;
         }
 
         return $sign . $formattedValue . ' ' . $unit;
@@ -704,23 +639,11 @@ class Util
         $formattedSize = (string) $formattedSize;
 
         if (preg_match('/^[0-9]+GB$/', $formattedSize)) {
-            $returnValue = (int) mb_substr(
-                $formattedSize,
-                0,
-                -2
-            ) * pow(1024, 3);
+            $returnValue = (int) mb_substr($formattedSize, 0, -2) * 1024 ** 3;
         } elseif (preg_match('/^[0-9]+MB$/', $formattedSize)) {
-            $returnValue = (int) mb_substr(
-                $formattedSize,
-                0,
-                -2
-            ) * pow(1024, 2);
+            $returnValue = (int) mb_substr($formattedSize, 0, -2) * 1024 ** 2;
         } elseif (preg_match('/^[0-9]+K$/', $formattedSize)) {
-            $returnValue = (int) mb_substr(
-                $formattedSize,
-                0,
-                -1
-            ) * pow(1024, 1);
+            $returnValue = (int) mb_substr($formattedSize, 0, -1) * 1024 ** 1;
         }
 
         return $returnValue;
@@ -733,8 +656,6 @@ class Util
      * @param string $format    format
      *
      * @return string   the formatted date
-     *
-     * @access public
      */
     public static function localisedDate($timestamp = -1, $format = '')
     {
@@ -792,12 +713,12 @@ class Util
 
         $date = (string) preg_replace(
             '@%[aA]@',
-            $dayOfWeek[(int) strftime('%w', (int) $timestamp)],
+            $dayOfWeek[(int) @strftime('%w', (int) $timestamp)],
             $format
         );
         $date = (string) preg_replace(
             '@%[bB]@',
-            $month[(int) strftime('%m', (int) $timestamp) - 1],
+            $month[(int) @strftime('%m', (int) $timestamp) - 1],
             $date
         );
 
@@ -813,13 +734,10 @@ class Util
 
         // Can return false on windows for Japanese language
         // See https://github.com/phpmyadmin/phpmyadmin/issues/15830
-        $ret = strftime($date, (int) $timestamp);
+        $ret = @strftime($date, (int) $timestamp);
         // Some OSes such as Win8.1 Traditional Chinese version did not produce UTF-8
         // output here. See https://github.com/phpmyadmin/phpmyadmin/issues/10598
-        if (
-            $ret === false
-            || mb_detect_encoding($ret, 'UTF-8', true) !== 'UTF-8'
-        ) {
+        if ($ret === false || mb_detect_encoding($ret, 'UTF-8', true) !== 'UTF-8') {
             $ret = date('Y-m-d H:i:s', (int) $timestamp);
         }
 
@@ -848,10 +766,8 @@ class Util
 
         $urlParts = parse_url($url);
 
-        if (is_array($urlParts) && isset($urlParts['query'])) {
-            $array = explode($separator, $urlParts['query']);
-
-            return is_array($array) ? $array : [];
+        if (is_array($urlParts) && isset($urlParts['query']) && strlen($separator) > 0) {
+            return explode($separator, $urlParts['query']);
         }
 
         return [];
@@ -898,8 +814,6 @@ class Util
      * @param string[] $params  The names of the parameters needed by the calling
      *                          script
      * @param bool     $request Check parameters in request
-     *
-     * @access public
      */
     public static function checkParameters($params, $request = false): void
     {
@@ -942,6 +856,7 @@ class Util
      * @param string                $condition    The condition
      *
      * @return array<int,string|null>
+     * @psalm-return array{string|null, string}
      */
     private static function getConditionValue(
         $row,
@@ -964,11 +879,7 @@ class Util
         // for real we use CONCAT above and it should compare to string
         // See commit: 049fc7fef7548c2ba603196937c6dcaf9ff9bf00
         // See bug: https://sourceforge.net/p/phpmyadmin/bugs/3064/
-        if (
-            $meta->isNumeric
-            && ! $meta->isMappedTypeTimestamp
-            && $meta->isNotType(FieldMetadata::TYPE_REAL)
-        ) {
+        if ($meta->isNumeric && ! $meta->isMappedTypeTimestamp && $meta->isNotType(FieldMetadata::TYPE_REAL)) {
             $conditionValue = '= ' . $row;
         } elseif ($isBlobAndIsBinaryCharset || (! empty($row) && $isBinaryString)) {
             // hexify only if this is a true not empty BLOB or a BINARY
@@ -988,10 +899,7 @@ class Util
                 // this blob won't be part of the final condition
                 $conditionValue = null;
             }
-        } elseif (
-            $meta->isMappedTypeGeometry
-            && ! empty($row)
-        ) {
+        } elseif ($meta->isMappedTypeGeometry && ! empty($row)) {
             // do not build a too big condition
             if (mb_strlen((string) $row) < 5000) {
                 $condition .= '=0x' . bin2hex((string) $row) . ' AND';
@@ -1012,18 +920,17 @@ class Util
     /**
      * Function to generate unique condition for specified row.
      *
-     * @param resource|int    $handle          current query result
      * @param int             $fieldsCount     number of fields
      * @param FieldMetadata[] $fieldsMeta      meta information about fields
      * @param array           $row             current row
      * @param bool            $forceUnique     generate condition only on pk or unique
      * @param string|bool     $restrictToTable restrict the unique condition to this table or false if none
      * @param Expression[]    $expressions     An array of Expression instances.
+     * @psalm-param array<int, mixed> $row
      *
      * @return array the calculated condition and whether condition is unique
      */
     public static function getUniqueCondition(
-        $handle,
         $fieldsCount,
         array $fieldsMeta,
         array $row,
@@ -1033,20 +940,20 @@ class Util
     ): array {
         global $dbi;
 
-        $primaryKey          = '';
-        $uniqueKey           = '';
+        $primaryKey = '';
+        $uniqueKey = '';
         $nonPrimaryCondition = '';
         $preferredCondition = '';
-        $primaryKeyArray    = [];
-        $uniqueKeyArray     = [];
+        $primaryKeyArray = [];
+        $uniqueKeyArray = [];
         $nonPrimaryConditionArray = [];
         $conditionArray = [];
 
         for ($i = 0; $i < $fieldsCount; ++$i) {
-            $meta        = $fieldsMeta[$i];
+            $meta = $fieldsMeta[$i];
 
             // do not use a column alias in a condition
-            if (! isset($meta->orgname) || strlen($meta->orgname) === 0) {
+            if ($meta->orgname === '') {
                 $meta->orgname = $meta->name;
 
                 foreach ($expressions as $expression) {
@@ -1073,8 +980,7 @@ class Util
             // (The isView() verification should not be costly in most cases
             // because there is some caching in the function).
             if (
-                isset($meta->orgtable)
-                && ($meta->table != $meta->orgtable)
+                $meta->table !== $meta->orgtable
                 && ! $dbi->getTable($GLOBALS['db'], $meta->table)->isView()
             ) {
                 $meta->table = $meta->orgtable;
@@ -1101,13 +1007,7 @@ class Util
 
             $condition = ' ' . $conKey . ' ';
 
-            [$conVal, $condition] = self::getConditionValue(
-                $row[$i] ?? null,
-                $meta,
-                $fieldsCount,
-                $conKey,
-                $condition
-            );
+            [$conVal, $condition] = self::getConditionValue($row[$i] ?? null, $meta, $fieldsCount, $conKey, $condition);
 
             if ($conVal === null) {
                 continue;
@@ -1119,7 +1019,7 @@ class Util
                 $primaryKey .= $condition;
                 $primaryKeyArray[$conKey] = $conVal;
             } elseif ($meta->isUniqueKey()) {
-                $uniqueKey  .= $condition;
+                $uniqueKey .= $condition;
                 $uniqueKeyArray[$conKey] = $conVal;
             }
 
@@ -1189,8 +1089,6 @@ class Util
      * @param int    $range       Near the current page, how many pages should
      *                            be considered "nearby" and displayed as well?
      * @param string $prompt      The prompt to display (sometimes empty)
-     *
-     * @access public
      */
     public static function pageselector(
         $name,
@@ -1331,8 +1229,6 @@ class Util
      * @param int $maxCount number of items per page
      *
      * @return int $page_num
-     *
-     * @access public
      */
     public static function getPageFromPosition($pos, $maxCount)
     {
@@ -1352,7 +1248,7 @@ class Util
      *
      * @return string per user directory
      */
-    public static function userDir($dir): string
+    public static function userDir(string $dir): string
     {
         // add trailing slash
         if (mb_substr($dir, -1) !== '/') {
@@ -1392,7 +1288,7 @@ class Util
             // FIXME: does not work for the leftmost bit of a 64-bit value
             $i = 0;
             $printable = '';
-            while ($value >= pow(2, $i)) {
+            while ($value >= 2 ** $i) {
                 ++$i;
             }
 
@@ -1401,11 +1297,11 @@ class Util
             }
 
             while ($i >= 0) {
-                if ($value - pow(2, $i) < 0) {
+                if ($value - 2 ** $i < 0) {
                     $printable = '0' . $printable;
                 } else {
                     $printable = '1' . $printable;
-                    $value -= pow(2, $i);
+                    $value -= 2 ** $i;
                 }
 
                 --$i;
@@ -1486,36 +1382,21 @@ class Util
             // this would be a BINARY or VARBINARY column type;
             // by the way, a BLOB should not show the BINARY attribute
             // because this is not accepted in MySQL syntax.
-            if (
-                strpos($printType, 'binary') !== false
-                && ! preg_match('@binary[\(]@', $printType)
-            ) {
+            if (str_contains($printType, 'binary') && ! preg_match('@binary[\(]@', $printType)) {
                 $printType = str_replace('binary', '', $printType);
                 $binary = true;
             } else {
                 $binary = false;
             }
 
-            $printType = (string) preg_replace(
-                '@zerofill@',
-                '',
-                $printType,
-                -1,
-                $zerofillCount
-            );
+            $printType = (string) preg_replace('@zerofill@', '', $printType, -1, $zerofillCount);
             $zerofill = ($zerofillCount > 0);
-            $printType = (string) preg_replace(
-                '@unsigned@',
-                '',
-                $printType,
-                -1,
-                $unsignedCount
-            );
+            $printType = (string) preg_replace('@unsigned@', '', $printType, -1, $unsignedCount);
             $unsigned = ($unsignedCount > 0);
             $printType = trim($printType);
         }
 
-        $attribute     = ' ';
+        $attribute = ' ';
         if ($binary) {
             $attribute = 'BINARY';
         }
@@ -1529,20 +1410,14 @@ class Util
         }
 
         $canContainCollation = false;
-        if (
-            ! $binary
-            && preg_match(
-                '@^(char|varchar|text|tinytext|mediumtext|longtext|set|enum)@',
-                $type
-            )
-        ) {
+        if (! $binary && preg_match('@^(char|varchar|text|tinytext|mediumtext|longtext|set|enum)@', $type)) {
             $canContainCollation = true;
         }
 
         // for the case ENUM('&#8211;','&ldquo;')
         $displayedType = htmlspecialchars($printType, ENT_COMPAT);
         if (mb_strlen($printType) > $GLOBALS['cfg']['LimitChars']) {
-            $displayedType  = '<abbr title="' . htmlspecialchars($printType) . '">';
+            $displayedType = '<abbr title="' . htmlspecialchars($printType) . '">';
             $displayedType .= htmlspecialchars(
                 mb_substr(
                     $printType,
@@ -1557,7 +1432,7 @@ class Util
         return [
             'type' => $type,
             'spec_in_brackets' => $specInBrackets,
-            'enum_set_values'  => $enumSetValues,
+            'enum_set_values' => $enumSetValues,
             'print_type' => $printType,
             'binary' => $binary,
             'unsigned' => $unsigned,
@@ -1598,7 +1473,7 @@ class Util
     public static function getTitleForTarget($target)
     {
         $mapping = [
-            'structure' =>  __('Structure'),
+            'structure' => __('Structure'),
             'sql' => __('SQL'),
             'search' => __('Search'),
             'insert' => __('Insert'),
@@ -1794,16 +1669,13 @@ class Util
         }
 
         /* Backward compatibility in 3.5.x */
-        if (mb_strpos($string, '@FIELDS@') !== false) {
+        if (str_contains($string, '@FIELDS@')) {
             $string = strtr($string, ['@FIELDS@' => '@COLUMNS@']);
         }
 
         /* Fetch columns list if required */
-        if (mb_strpos($string, '@COLUMNS@') !== false) {
-            $columnsList = $dbi->getColumns(
-                $GLOBALS['db'],
-                $GLOBALS['table']
-            );
+        if (str_contains($string, '@COLUMNS@')) {
+            $columnsList = $dbi->getColumns($GLOBALS['db'], $GLOBALS['table']);
 
             // sometimes the table no longer exists at this point
             if ($columnsList !== null) {
@@ -1823,7 +1695,7 @@ class Util
         }
 
         /* Do the replacement */
-        return strtr((string) strftime($string), $replace);
+        return strtr((string) @strftime($string), $replace);
     }
 
     /**
@@ -1908,7 +1780,7 @@ class Util
             return true;
         }
 
-        $username  = "''";
+        $username = "''";
         $username .= str_replace("'", "''", $user);
         $username .= "''@''";
         $username .= str_replace("'", "''", $host);
@@ -2031,10 +1903,7 @@ class Util
             } elseif (($inString && $curr === '\\') && $next === '\\') {
                 $buffer .= '&#92;';
                 $i++;
-            } elseif (
-                ($inString && $next == "'")
-                && ($curr == "'" || $curr === '\\')
-            ) {
+            } elseif (($inString && $next == "'") && ($curr == "'" || $curr === '\\')) {
                 $buffer .= '&#39;';
                 $i++;
             } elseif ($inString && $curr == "'") {
@@ -2042,7 +1911,7 @@ class Util
                 $values[] = $buffer;
                 $buffer = '';
             } elseif ($inString) {
-                 $buffer .= $curr;
+                $buffer .= $curr;
             }
         }
 
@@ -2061,38 +1930,6 @@ class Util
     }
 
     /**
-     * Get regular expression which occur first inside the given sql query.
-     *
-     * @param array  $regexArray Comparing regular expressions.
-     * @param string $query      SQL query to be checked.
-     *
-     * @return string Matching regular expression.
-     */
-    public static function getFirstOccurringRegularExpression(array $regexArray, $query): string
-    {
-        $minimumFirstOccurrenceIndex = null;
-        $regex = null;
-
-        foreach ($regexArray as $testRegex) {
-            if (! preg_match($testRegex, $query, $matches, PREG_OFFSET_CAPTURE)) {
-                continue;
-            }
-
-            if (
-                $minimumFirstOccurrenceIndex !== null
-                && ($matches[0][1] >= $minimumFirstOccurrenceIndex)
-            ) {
-                continue;
-            }
-
-            $regex = $testRegex;
-            $minimumFirstOccurrenceIndex = $matches[0][1];
-        }
-
-        return $regex;
-    }
-
-    /**
      * Return the list of tabs for the menu with corresponding names
      *
      * @param string $level 'server', 'db' or 'table' level
@@ -2103,48 +1940,48 @@ class Util
     {
         $tabList = [
             'server' => [
-                'databases'   => __('Databases'),
-                'sql'         => __('SQL'),
-                'status'      => __('Status'),
-                'rights'      => __('Users'),
-                'export'      => __('Export'),
-                'import'      => __('Import'),
-                'settings'    => __('Settings'),
-                'binlog'      => __('Binary log'),
+                'databases' => __('Databases'),
+                'sql' => __('SQL'),
+                'status' => __('Status'),
+                'rights' => __('Users'),
+                'export' => __('Export'),
+                'import' => __('Import'),
+                'settings' => __('Settings'),
+                'binlog' => __('Binary log'),
                 'replication' => __('Replication'),
-                'vars'        => __('Variables'),
-                'charset'     => __('Charsets'),
-                'plugins'     => __('Plugins'),
-                'engine'      => __('Engines'),
+                'vars' => __('Variables'),
+                'charset' => __('Charsets'),
+                'plugins' => __('Plugins'),
+                'engine' => __('Engines'),
             ],
-            'db'     => [
-                'structure'   => __('Structure'),
-                'sql'         => __('SQL'),
-                'search'      => __('Search'),
-                'query'       => __('Query'),
-                'export'      => __('Export'),
-                'import'      => __('Import'),
-                'operation'   => __('Operations'),
-                'privileges'  => __('Privileges'),
-                'routines'    => __('Routines'),
-                'events'      => __('Events'),
-                'triggers'    => __('Triggers'),
-                'tracking'    => __('Tracking'),
-                'designer'    => __('Designer'),
+            'db' => [
+                'structure' => __('Structure'),
+                'sql' => __('SQL'),
+                'search' => __('Search'),
+                'query' => __('Query'),
+                'export' => __('Export'),
+                'import' => __('Import'),
+                'operation' => __('Operations'),
+                'privileges' => __('Privileges'),
+                'routines' => __('Routines'),
+                'events' => __('Events'),
+                'triggers' => __('Triggers'),
+                'tracking' => __('Tracking'),
+                'designer' => __('Designer'),
                 'central_columns' => __('Central columns'),
             ],
-            'table'  => [
-                'browse'      => __('Browse'),
-                'structure'   => __('Structure'),
-                'sql'         => __('SQL'),
-                'search'      => __('Search'),
-                'insert'      => __('Insert'),
-                'export'      => __('Export'),
-                'import'      => __('Import'),
-                'privileges'  => __('Privileges'),
-                'operation'   => __('Operations'),
-                'tracking'    => __('Tracking'),
-                'triggers'    => __('Triggers'),
+            'table' => [
+                'browse' => __('Browse'),
+                'structure' => __('Structure'),
+                'sql' => __('SQL'),
+                'search' => __('Search'),
+                'insert' => __('Insert'),
+                'export' => __('Export'),
+                'import' => __('Import'),
+                'privileges' => __('Privileges'),
+                'operation' => __('Operations'),
+                'tracking' => __('Tracking'),
+                'triggers' => __('Triggers'),
             ],
         ];
 
@@ -2170,14 +2007,11 @@ class Util
      */
     public static function addMicroseconds($value)
     {
-        if (
-            empty($value) || $value === 'CURRENT_TIMESTAMP'
-            || $value === 'current_timestamp()'
-        ) {
+        if (empty($value) || $value === 'CURRENT_TIMESTAMP' || $value === 'current_timestamp()') {
             return $value;
         }
 
-        if (mb_strpos($value, '.') === false) {
+        if (! str_contains($value, '.')) {
             return $value . '.000000';
         }
 
@@ -2256,10 +2090,10 @@ class Util
      */
     public static function processIndexData(array $indexes)
     {
-        $lastIndex    = '';
+        $lastIndex = '';
 
-        $primary      = '';
-        $pkArray     = []; // will be use to emphasis prim. keys in the table
+        $primary = '';
+        $pkArray = []; // will be use to emphasis prim. keys in the table
         $indexesInfo = [];
         $indexesData = [];
 
@@ -2267,7 +2101,7 @@ class Util
         foreach ($indexes as $row) {
             // Backups the list of primary keys
             if ($row['Key_name'] === 'PRIMARY') {
-                $primary   .= $row['Column_name'] . ', ';
+                $primary .= $row['Column_name'] . ', ';
                 $pkArray[$row['Column_name']] = 1;
             }
 
@@ -2308,22 +2142,19 @@ class Util
      * Gets the list of tables in the current db and information about these
      * tables if possible
      *
-     * @param string      $db      database name
-     * @param string|null $subPart part of script name
+     * @param string $db      database name
+     * @param string $subPart part of script name
      *
      * @return array
      */
-    public static function getDbInfo($db, ?string $subPart)
+    public static function getDbInfo($db, string $subPart)
     {
         global $cfg, $dbi;
 
         /**
          * limits for table list
          */
-        if (
-            ! isset($_SESSION['tmpval']['table_limit_offset'])
-            || $_SESSION['tmpval']['table_limit_offset_db'] != $db
-        ) {
+        if (! isset($_SESSION['tmpval']['table_limit_offset']) || $_SESSION['tmpval']['table_limit_offset_db'] != $db) {
             $_SESSION['tmpval']['table_limit_offset'] = 0;
             $_SESSION['tmpval']['table_limit_offset_db'] = $db;
         }
@@ -2364,10 +2195,8 @@ class Util
             );
 
             // Blending out tables in use
-            if ($dbInfoResult && $dbi->numRows($dbInfoResult) > 0) {
+            if ($dbInfoResult->numRows() > 0) {
                 $tables = self::getTablesWhenOpen($db, $dbInfoResult);
-            } elseif ($dbInfoResult) {
-                $dbi->freeResult($dbInfoResult);
             }
         }
 
@@ -2378,16 +2207,16 @@ class Util
 
             if (isset($_REQUEST['sort'])) {
                 $sortableNameMappings = [
-                    'table'       => 'Name',
-                    'records'     => 'Rows',
-                    'type'        => 'Engine',
-                    'collation'   => 'Collation',
-                    'size'        => 'Data_length',
-                    'overhead'    => 'Data_free',
-                    'creation'    => 'Create_time',
+                    'table' => 'Name',
+                    'records' => 'Rows',
+                    'type' => 'Engine',
+                    'collation' => 'Collation',
+                    'size' => 'Data_length',
+                    'overhead' => 'Data_free',
+                    'creation' => 'Create_time',
                     'last_update' => 'Update_time',
-                    'last_check'  => 'Check_time',
-                    'comment'     => 'Comment',
+                    'last_check' => 'Check_time',
+                    'comment' => 'Comment',
                 ];
 
                 // Make sure the sort type is implemented
@@ -2435,7 +2264,7 @@ class Util
                 //  (needed for proper working of the MaxTableList feature)
                 $tables = $dbi->getTables($db);
                 $totalNumTables = count($tables);
-                if (! (isset($subPart) && $subPart === '_export')) {
+                if ($subPart !== '_export') {
                     // fetch the details for a possible limited subset
                     $limitOffset = $pos;
                     $limitCount = true;
@@ -2467,7 +2296,7 @@ class Util
          * If coming from a Show MySQL link on the home page,
          * put something in $sub_part
          */
-        if (empty($subPart)) {
+        if ($subPart === '') {
             $subPart = '_structure';
         }
 
@@ -2488,30 +2317,32 @@ class Util
      * Gets the list of tables in the current db, taking into account
      * that they might be "in use"
      *
-     * @param string $db           database name
-     * @param object $dbInfoResult result set
+     * @param string          $db           database name
+     * @param ResultInterface $dbInfoResult result set
      *
      * @return array list of tables
      */
-    public static function getTablesWhenOpen($db, $dbInfoResult): array
+    public static function getTablesWhenOpen($db, ResultInterface $dbInfoResult): array
     {
         global $dbi;
 
         $sotCache = [];
         $tables = [];
 
-        while ($tmp = $dbi->fetchAssoc($dbInfoResult)) {
+        foreach ($dbInfoResult as $tmp) {
             $sotCache[$tmp['Table']] = true;
         }
-
-        $dbi->freeResult($dbInfoResult);
 
         // is there at least one "in use" table?
         if (count($sotCache) > 0) {
             $tblGroupSql = '';
             $whereAdded = false;
-            if (Core::isValid($_REQUEST['tbl_group'])) {
-                $group = self::escapeMysqlWildcards($_REQUEST['tbl_group']);
+            if (
+                isset($_REQUEST['tbl_group'])
+                && is_scalar($_REQUEST['tbl_group'])
+                && strlen((string) $_REQUEST['tbl_group']) > 0
+            ) {
+                $group = self::escapeMysqlWildcards((string) $_REQUEST['tbl_group']);
                 $groupWithSeparator = self::escapeMysqlWildcards(
                     $_REQUEST['tbl_group']
                     . $GLOBALS['cfg']['NavigationTreeTableSeparator']
@@ -2525,7 +2356,7 @@ class Util
                 $whereAdded = true;
             }
 
-            if (Core::isValid($_REQUEST['tbl_type'], ['table', 'view'])) {
+            if (isset($_REQUEST['tbl_type']) && in_array($_REQUEST['tbl_type'], ['table', 'view'])) {
                 $tblGroupSql .= $whereAdded ? ' AND' : ' WHERE';
                 if ($_REQUEST['tbl_type'] === 'view') {
                     $tblGroupSql .= " `Table_type` NOT IN ('BASE TABLE', 'SYSTEM VERSIONED')";
@@ -2534,16 +2365,12 @@ class Util
                 }
             }
 
-            $dbInfoResult = $dbi->query(
-                'SHOW FULL TABLES FROM ' . self::backquote($db) . $tblGroupSql,
-                DatabaseInterface::CONNECT_USER,
-                DatabaseInterface::QUERY_STORE
-            );
+            $dbInfoResult = $dbi->query('SHOW FULL TABLES FROM ' . self::backquote($db) . $tblGroupSql);
             unset($tblGroupSql, $whereAdded);
 
-            if ($dbInfoResult && $dbi->numRows($dbInfoResult) > 0) {
+            if ($dbInfoResult->numRows() > 0) {
                 $names = [];
-                while ($tmp = $dbi->fetchRow($dbInfoResult)) {
+                while ($tmp = $dbInfoResult->fetchRow()) {
                     if (! isset($sotCache[$tmp[0]])) {
                         $names[] = $tmp[0];
                     } else { // table in use
@@ -2567,8 +2394,6 @@ class Util
                 if ($GLOBALS['cfg']['NaturalOrder']) {
                     uksort($tables, 'strnatcasecmp');
                 }
-            } elseif ($dbInfoResult) {
-                $dbi->freeResult($dbInfoResult);
             }
 
             unset($sotCache);
@@ -2637,21 +2462,13 @@ class Util
     public static function generateRandom(int $length, bool $asHex = false): string
     {
         $result = '';
-        if (class_exists(Random::class)) {
-            $randomFunction = [
-                Random::class,
-                'string',
-            ];
-        } else {
-            $randomFunction = 'openssl_random_pseudo_bytes';
-        }
 
         while (strlen($result) < $length) {
             // Get random byte and strip highest bit
             // to get ASCII only range
-            $byte = ord((string) $randomFunction(1)) & 0x7f;
-            // We want only ASCII chars
-            if ($byte <= 32) {
+            $byte = ord(random_bytes(1)) & 0x7f;
+            // We want only ASCII chars and no DEL character (127)
+            if ($byte <= 32 || $byte === 127) {
                 continue;
             }
 
@@ -2670,10 +2487,6 @@ class Util
      */
     public static function date($format)
     {
-        if (defined('TESTSUITE')) {
-            return '0000-00-00 00:00:00';
-        }
-
         return date($format);
     }
 
@@ -2801,7 +2614,7 @@ class Util
             'sort_order' => $futureSortOrder,
         ];
 
-        if (Core::isValid($_REQUEST['tbl_type'], ['view', 'table'])) {
+        if (isset($_REQUEST['tbl_type']) && in_array($_REQUEST['tbl_type'], ['view', 'table'])) {
             $urlParams['tbl_type'] = $_REQUEST['tbl_type'];
         }
 
@@ -2809,9 +2622,9 @@ class Util
             $urlParams['tbl_group'] = $_REQUEST['tbl_group'];
         }
 
-        $url = Url::getFromRoute('/database/structure', $urlParams);
+        $url = Url::getFromRoute('/database/structure');
 
-        return Generator::linkOrButton($url, $title . $orderImg, $orderLinkParams);
+        return Generator::linkOrButton($url, $urlParams, $title . $orderImg, $orderLinkParams);
     }
 
     /**
@@ -2833,7 +2646,7 @@ class Util
      */
     public static function getProtoFromForwardedHeader(string $headerContents): string
     {
-        if (strpos($headerContents, '=') !== false) {// does not contain any equal sign
+        if (str_contains($headerContents, '=')) {// does not contain any equal sign
             $hops = explode(',', $headerContents);
             $parts = explode(';', $hops[0]);
             foreach ($parts as $part) {

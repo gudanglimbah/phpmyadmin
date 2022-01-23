@@ -37,10 +37,8 @@ $AUTH_MAP = [
  * Simple function to show HTML page with given content.
  *
  * @param string $contents Content to include in page
- *
- * @return void
  */
-function Show_page($contents)
+function Show_page($contents): void
 {
     header('Content-Type: text/html; charset=utf-8');
 
@@ -68,10 +66,8 @@ function Show_page($contents)
  * Display error and exit
  *
  * @param Exception $e Exception object
- *
- * @return void
  */
-function Die_error($e)
+function Die_error($e): void
 {
     $contents = "<div class='relyingparty_results'>\n";
     $contents .= '<pre>' . htmlspecialchars($e->getMessage()) . "</pre>\n";
@@ -169,7 +165,7 @@ if (empty($id) || ! isset($AUTH_MAP[$id])) {
 
 $_SESSION['PMA_single_signon_user'] = $AUTH_MAP[$id]['user'];
 $_SESSION['PMA_single_signon_password'] = $AUTH_MAP[$id]['password'];
-$_SESSION['PMA_single_signon_HMAC_secret'] = hash('sha1', uniqid(strval(rand()), true));
+$_SESSION['PMA_single_signon_HMAC_secret'] = hash('sha1', uniqid(strval(random_int(0, mt_getrandmax())), true));
 session_write_close();
 /* Redirect to phpMyAdmin (should use absolute URL here!) */
 header('Location: ../index.php');

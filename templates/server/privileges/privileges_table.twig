@@ -15,13 +15,19 @@
         <code><dfn title="{% trans 'Allows reading data.' %}">SELECT</dfn></code>
       </label>
 
-      <select id="select_select_priv" name="Select_priv[]" size="8" multiple>
+      <select class="resize-vertical" id="select_select_priv" name="Select_priv[]" size="8" multiple>
         {% for curr_col, curr_col_privs in columns %}
           <option value="{{ curr_col }}"{{ row['Select_priv'] == 'Y' or curr_col_privs['Select'] ? ' selected' }}>
             {{ curr_col }}
           </option>
         {% endfor %}
       </select>
+
+      <div>
+        <button class="btn btn-link p-0" id="select_priv_all" type="button" data-select-target="#select_select_priv">
+          {% trans 'Select all' %}
+        </button>
+      </div>
 
       <em>{% trans 'Or' %}</em>
       <label for="checkbox_Select_priv_none">
@@ -36,13 +42,19 @@
         <code><dfn title="{% trans 'Allows inserting and replacing data.' %}">INSERT</dfn></code>
       </label>
 
-      <select id="select_insert_priv" name="Insert_priv[]" size="8" multiple>
+      <select class="resize-vertical" id="select_insert_priv" name="Insert_priv[]" size="8" multiple>
         {% for curr_col, curr_col_privs in columns %}
           <option value="{{ curr_col }}"{{ row['Insert_priv'] == 'Y' or curr_col_privs['Insert'] ? ' selected' }}>
             {{ curr_col }}
           </option>
         {% endfor %}
       </select>
+
+      <div>
+        <button class="btn btn-link p-0" id="insert_priv_all" type="button" data-select-target="#select_insert_priv">
+          {% trans 'Select all' %}
+        </button>
+      </div>
 
       <em>{% trans 'Or' %}</em>
       <label for="checkbox_Insert_priv_none">
@@ -57,13 +69,19 @@
         <code><dfn title="{% trans 'Allows changing data.' %}">UPDATE</dfn></code>
       </label>
 
-      <select id="select_update_priv" name="Update_priv[]" size="8" multiple>
+      <select class="resize-vertical" id="select_update_priv" name="Update_priv[]" size="8" multiple>
         {% for curr_col, curr_col_privs in columns %}
           <option value="{{ curr_col }}"{{ row['Update_priv'] == 'Y' or curr_col_privs['Update'] ? ' selected' }}>
             {{ curr_col }}
           </option>
         {% endfor %}
       </select>
+
+      <div>
+        <button class="btn btn-link p-0" id="update_priv_all" type="button" data-select-target="#select_update_priv">
+          {% trans 'Select all' %}
+        </button>
+      </div>
 
       <em>{% trans 'Or' %}</em>
       <label for="checkbox_Update_priv_none">
@@ -78,13 +96,19 @@
         <code><dfn title="{% trans 'Has no effect in this MySQL version.' %}">REFERENCES</dfn></code>
       </label>
 
-      <select id="select_references_priv" name="References_priv[]" size="8" multiple>
+      <select class="resize-vertical" id="select_references_priv" name="References_priv[]" size="8" multiple>
         {% for curr_col, curr_col_privs in columns %}
           <option value="{{ curr_col }}"{{ row['References_priv'] == 'Y' or curr_col_privs['References'] ? ' selected' }}>
             {{ curr_col }}
           </option>
         {% endfor %}
       </select>
+
+      <div>
+        <button class="btn btn-link p-0" id="references_priv_all" type="button" data-select-target="#select_references_priv">
+          {% trans 'Select all' %}
+        </button>
+      </div>
 
       <em>{% trans 'Or' %}</em>
       <label for="checkbox_References_priv_none">
@@ -654,10 +678,10 @@
       <div class="item">
         {% set grant_count = grant_count + 1 %}
         <input type="checkbox" class="checkall" name="Repl_client_priv" id="checkbox_Repl_client_priv" value="Y" title="
-          {%- trans 'Allows the user to ask where the slaves / masters are.' %}"{{ row['Repl_client_priv'] == 'Y' ? ' checked' }}>
+          {%- trans 'Allows the user to ask where the replicas / primaries are.' %}"{{ row['Repl_client_priv'] == 'Y' ? ' checked' }}>
         <label for="checkbox_Repl_client_priv">
           <code>
-            <dfn title="{% trans 'Allows the user to ask where the slaves / masters are.' %}">
+            <dfn title="{% trans 'Allows the user to ask where the replicas / primaries are.' %}">
               REPLICATION CLIENT
             </dfn>
           </code>
@@ -667,10 +691,10 @@
       <div class="item">
         {% set grant_count = grant_count + 1 %}
         <input type="checkbox" class="checkall" name="Repl_slave_priv" id="checkbox_Repl_slave_priv" value="Y" title="
-          {%- trans 'Needed for the replication slaves.' %}"{{ row['Repl_slave_priv'] == 'Y' ? ' checked' }}>
+          {%- trans 'Needed for the replication replicas.' %}"{{ row['Repl_slave_priv'] == 'Y' ? ' checked' }}>
         <label for="checkbox_Repl_slave_priv">
           <code>
-            <dfn title="{% trans 'Needed for the replication slaves.' %}">
+            <dfn title="{% trans 'Needed for the replication replicas.' %}">
               REPLICATION SLAVE
             </dfn>
           </code>

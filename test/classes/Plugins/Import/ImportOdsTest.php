@@ -23,13 +23,10 @@ class ImportOdsTest extends AbstractTestCase
     /**
      * Sets up the fixture, for example, opens a network connection.
      * This method is called before a test is executed.
-     *
-     * @access protected
      */
     protected function setUp(): void
     {
         parent::setUp();
-        parent::loadDefaultConfig();
         $GLOBALS['server'] = 0;
         $GLOBALS['plugin_param'] = 'csv';
         $this->object = new ImportOds();
@@ -54,8 +51,6 @@ class ImportOdsTest extends AbstractTestCase
     /**
      * Tears down the fixture, for example, closes a network connection.
      * This method is called after a test is executed.
-     *
-     * @access protected
      */
     protected function tearDown(): void
     {
@@ -110,17 +105,12 @@ class ImportOdsTest extends AbstractTestCase
         $this->object->doImport($importHandle);
 
         $this->assertStringContainsString(
-            'CREATE DATABASE IF NOT EXISTS `ODS_DB` DEFAULT CHARACTER SET '
-            . 'utf8 COLLATE utf8_general_ci',
+            'CREATE DATABASE IF NOT EXISTS `ODS_DB` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci',
             $sql_query
         );
+        $this->assertStringContainsString('CREATE TABLE IF NOT EXISTS `ODS_DB`.`pma_bookmark`', $sql_query);
         $this->assertStringContainsString(
-            'CREATE TABLE IF NOT EXISTS `ODS_DB`.`pma_bookmark`',
-            $sql_query
-        );
-        $this->assertStringContainsString(
-            'INSERT INTO `ODS_DB`.`pma_bookmark` (`A`, `B`, `C`, `D`) VALUES '
-            . "(1, 'dbbase', NULL, 'ddd');",
+            'INSERT INTO `ODS_DB`.`pma_bookmark` (`A`, `B`, `C`, `D`) VALUES (1, \'dbbase\', NULL, \'ddd\');',
             $sql_query
         );
 
@@ -129,27 +119,13 @@ class ImportOdsTest extends AbstractTestCase
             'The following structures have either been created or altered.',
             $import_notice
         );
-        $this->assertStringContainsString(
-            'Go to database: `ODS_DB`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Edit settings for `ODS_DB`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Go to table: `pma_bookmark`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Edit settings for `pma_bookmark`',
-            $import_notice
-        );
+        $this->assertStringContainsString('Go to database: `ODS_DB`', $import_notice);
+        $this->assertStringContainsString('Edit settings for `ODS_DB`', $import_notice);
+        $this->assertStringContainsString('Go to table: `pma_bookmark`', $import_notice);
+        $this->assertStringContainsString('Edit settings for `pma_bookmark`', $import_notice);
 
         //asset that the import process is finished
-        $this->assertTrue(
-            $GLOBALS['finished']
-        );
+        $this->assertTrue($GLOBALS['finished']);
     }
 
     public function dataProviderOdsEmptyRows(): array
@@ -165,6 +141,7 @@ class ImportOdsTest extends AbstractTestCase
      *
      * @group medium
      * @dataProvider dataProviderOdsEmptyRows
+     * @requires extension simplexml
      */
     public function testDoImportDataset2(bool $odsEmptyRowsMode): void
     {
@@ -185,9 +162,6 @@ class ImportOdsTest extends AbstractTestCase
 
         // The process could probably detect that all the values for columns V to BL are empty
         // That would make the empty columns not needed and would create a cleaner structure
-        $nulls = '';
-        $nullCells = '';
-        $nullCellNames = '';
 
         $nulls = ', NULL' . str_repeat(', NULL', 44);// 45 empty cells
 
@@ -273,26 +247,12 @@ class ImportOdsTest extends AbstractTestCase
             'The following structures have either been created or altered.',
             $import_notice
         );
-        $this->assertStringContainsString(
-            'Go to database: `ODS_DB`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Edit settings for `ODS_DB`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Go to table: `Shop`',
-            $import_notice
-        );
-        $this->assertStringContainsString(
-            'Edit settings for `Shop`',
-            $import_notice
-        );
+        $this->assertStringContainsString('Go to database: `ODS_DB`', $import_notice);
+        $this->assertStringContainsString('Edit settings for `ODS_DB`', $import_notice);
+        $this->assertStringContainsString('Go to table: `Shop`', $import_notice);
+        $this->assertStringContainsString('Edit settings for `Shop`', $import_notice);
 
         //asset that the import process is finished
-        $this->assertTrue(
-            $GLOBALS['finished']
-        );
+        $this->assertTrue($GLOBALS['finished']);
     }
 }

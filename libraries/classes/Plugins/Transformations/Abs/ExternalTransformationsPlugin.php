@@ -58,10 +58,8 @@ abstract class ExternalTransformationsPlugin extends TransformationsPlugin
      * Enables no-wrapping
      *
      * @param array $options transformation options
-     *
-     * @return bool
      */
-    public function applyTransformationNoWrap(array $options = [])
+    public function applyTransformationNoWrap(array $options = []): bool
     {
         if (! isset($options[3]) || $options[3] == '') {
             $nowrap = true;
@@ -110,10 +108,7 @@ abstract class ExternalTransformationsPlugin extends TransformationsPlugin
         }
 
         $cfg = $GLOBALS['cfg'];
-        $options = $this->getOptions(
-            $options,
-            $cfg['DefaultTransformations']['External']
-        );
+        $options = $this->getOptions($options, $cfg['DefaultTransformations']['External']);
 
         if (isset($allowed_programs[$options[0]])) {
             $program = $allowed_programs[$options[0]];

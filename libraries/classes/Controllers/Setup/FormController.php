@@ -10,6 +10,7 @@ use PhpMyAdmin\Core;
 use PhpMyAdmin\Setup\FormProcessing;
 
 use function __;
+use function is_string;
 use function ob_get_clean;
 use function ob_start;
 
@@ -20,11 +21,11 @@ class FormController extends AbstractController
      *
      * @return string HTML
      */
-    public function index(array $params): string
+    public function __invoke(array $params): string
     {
         $pages = $this->getPages();
 
-        $formset = Core::isValid($params['formset'], 'scalar') ? $params['formset'] : null;
+        $formset = isset($params['formset']) && is_string($params['formset']) ? $params['formset'] : '';
 
         $formClass = SetupFormList::get($formset);
         if ($formClass === null) {
@@ -38,7 +39,7 @@ class FormController extends AbstractController
         $page = ob_get_clean();
 
         return $this->template->render('setup/form/index', [
-            'formset' => $params['formset'] ?? '',
+            'formset' => $formset,
             'pages' => $pages,
             'name' => $form::getName(),
             'page' => $page,

@@ -13,9 +13,9 @@ use function function_exists;
 use function in_array;
 use function preg_match;
 use function setlocale;
+use function str_contains;
 use function str_replace;
 use function strcmp;
-use function strpos;
 
 /**
  * Language object
@@ -51,7 +51,7 @@ class Language
         $this->code = $code;
         $this->name = $name;
         $this->native = $native;
-        if (strpos($regex, '[-_]') === false) {
+        if (! str_contains($regex, '[-_]')) {
             $regex = str_replace('|', '([-_][[:alpha:]]{2,3})?|', $regex);
         }
 
@@ -127,10 +127,8 @@ class Language
 
     /**
      * Checks whether language is currently active.
-     *
-     * @return bool
      */
-    public function isActive()
+    public function isActive(): bool
     {
         return $GLOBALS['lang'] == $this->code;
     }
@@ -139,50 +137,42 @@ class Language
      * Checks whether language matches HTTP header Accept-Language.
      *
      * @param string $header Header content
-     *
-     * @return bool
      */
-    public function matchesAcceptLanguage($header)
+    public function matchesAcceptLanguage($header): bool
     {
         $pattern = '/^('
             . addcslashes($this->regex, '/')
             . ')(;q=[0-9]\\.[0-9])?$/i';
 
-        return preg_match($pattern, $header);
+        return (bool) preg_match($pattern, $header);
     }
 
     /**
      * Checks whether language matches HTTP header User-Agent
      *
      * @param string $header Header content
-     *
-     * @return bool
      */
-    public function matchesUserAgent($header)
+    public function matchesUserAgent($header): bool
     {
         $pattern = '/(\(|\[|;[[:space:]])('
             . addcslashes($this->regex, '/')
             . ')(;|\]|\))/i';
 
-        return preg_match($pattern, $header);
+        return (bool) preg_match($pattern, $header);
     }
 
     /**
      * Checks whether language is RTL
-     *
-     * @return bool
      */
-    public function isRTL()
+    public function isRTL(): bool
     {
         return in_array($this->code, ['ar', 'fa', 'he', 'ur']);
     }
 
     /**
      * Activates given translation
-     *
-     * @return void
      */
-    public function activate()
+    public function activate(): void
     {
         $GLOBALS['lang'] = $this->code;
 

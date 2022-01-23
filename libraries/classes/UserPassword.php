@@ -73,26 +73,17 @@ class UserPassword
 
         $serverVersion = $dbi->getVersion();
 
-        if (
-            isset($_POST['authentication_plugin'])
-            && ! empty($_POST['authentication_plugin'])
-        ) {
+        if (isset($_POST['authentication_plugin']) && ! empty($_POST['authentication_plugin'])) {
             $orig_auth_plugin = $_POST['authentication_plugin'];
         } else {
-            $orig_auth_plugin = $this->serverPrivileges->getCurrentAuthenticationPlugin(
-                'change',
-                $username,
-                $hostname
-            );
+            $orig_auth_plugin = $this->serverPrivileges->getCurrentAuthenticationPlugin('change', $username, $hostname);
         }
 
         $sql_query = 'SET password = '
             . ($password == '' ? '\'\'' : $hashing_function . '(\'***\')');
 
         $isPerconaOrMySql = Compatibility::isMySqlOrPerconaDb();
-        if (
-            $isPerconaOrMySql && $serverVersion >= 50706
-        ) {
+        if ($isPerconaOrMySql && $serverVersion >= 50706) {
             $sql_query = 'ALTER USER \'' . $dbi->escapeString($username)
                 . '\'@\'' . $dbi->escapeString($hostname)
                 . '\' IDENTIFIED WITH ' . $orig_auth_plugin . ' BY '
@@ -135,13 +126,7 @@ class UserPassword
      */
     private function changePassHashingFunction()
     {
-        if (
-            Core::isValid(
-                $_POST['authentication_plugin'],
-                'identical',
-                'mysql_old_password'
-            )
-        ) {
+        if (isset($_POST['authentication_plugin']) && $_POST['authentication_plugin'] === 'mysql_old_password') {
             $hashing_function = 'OLD_PASSWORD';
         } else {
             $hashing_function = 'PASSWORD';
@@ -159,8 +144,6 @@ class UserPassword
      * @param string $sql_query        SQL query
      * @param string $hashing_function Hashing function
      * @param string $orig_auth_plugin Original Authentication Plugin
-     *
-     * @return void
      */
     private function changePassUrlParamsAndSubmitQuery(
         $username,
@@ -169,17 +152,14 @@ class UserPassword
         $sql_query,
         $hashing_function,
         $orig_auth_plugin
-    ) {
+    ): void {
         global $dbi;
 
         $err_url = Url::getFromRoute('/user-password');
 
         $serverVersion = $dbi->getVersion();
 
-        if (
-            Compatibility::isMySqlOrPerconaDb()
-            && $serverVersion >= 50706
-        ) {
+        if (Compatibility::isMySqlOrPerconaDb() && $serverVersion >= 50706) {
             $local_query = 'ALTER USER \'' . $dbi->escapeString($username)
                 . '\'@\'' . $dbi->escapeString($hostname) . '\''
                 . ' IDENTIFIED with ' . $orig_auth_plugin . ' BY '

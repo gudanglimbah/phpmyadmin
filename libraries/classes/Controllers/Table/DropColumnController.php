@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin\Controllers\Table;
 
+use PhpMyAdmin\ConfigStorage\RelationCleanup;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\FlashMessages;
 use PhpMyAdmin\Message;
-use PhpMyAdmin\RelationCleanup;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Util;
 
@@ -27,18 +27,12 @@ final class DropColumnController extends AbstractController
     /** @var RelationCleanup */
     private $relationCleanup;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name
-     * @param string            $table    Table name
-     * @param DatabaseInterface $dbi
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
-        $db,
-        $table,
-        $dbi,
+        string $db,
+        string $table,
+        DatabaseInterface $dbi,
         FlashMessages $flash,
         RelationCleanup $relationCleanup
     ) {
@@ -48,7 +42,7 @@ final class DropColumnController extends AbstractController
         $this->relationCleanup = $relationCleanup;
     }
 
-    public function process(): void
+    public function __invoke(): void
     {
         $selected = $_POST['selected'] ?? [];
 
@@ -74,7 +68,7 @@ final class DropColumnController extends AbstractController
             $result = $this->dbi->tryQuery($statement);
 
             if (! $result) {
-                $message = Message::error((string) $this->dbi->getError());
+                $message = Message::error($this->dbi->getError());
             }
         } else {
             $message = Message::success(__('No change'));

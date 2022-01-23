@@ -6,17 +6,17 @@ namespace PhpMyAdmin\Controllers\Table;
 
 use PhpMyAdmin\Charsets;
 use PhpMyAdmin\CheckUserPrivileges;
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\DbTableExists;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Index;
 use PhpMyAdmin\Message;
 use PhpMyAdmin\Operations;
-use PhpMyAdmin\Partition;
+use PhpMyAdmin\Partitioning\Partition;
 use PhpMyAdmin\Query\Generator as QueryGenerator;
 use PhpMyAdmin\Query\Utilities;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\StorageEngine;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
@@ -46,21 +46,15 @@ class OperationsController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name.
-     * @param string            $table    Table name.
-     * @param DatabaseInterface $dbi
-     */
     public function __construct(
-        $response,
+        ResponseRenderer $response,
         Template $template,
-        $db,
-        $table,
+        string $db,
+        string $table,
         Operations $operations,
         CheckUserPrivileges $checkUserPrivileges,
         Relation $relation,
-        $dbi
+        DatabaseInterface $dbi
     ) {
         parent::__construct($response, $template, $db, $table);
         $this->operations = $operations;
@@ -69,7 +63,7 @@ class OperationsController extends AbstractController
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $urlParams, $reread_info, $tbl_is_view, $tbl_storage_engine;
         global $show_comment, $tbl_collation, $table_info_num_rows, $row_format, $auto_increment, $create_options;
@@ -101,13 +95,11 @@ class OperationsController extends AbstractController
 
         $urlParams['goto'] = $urlParams['back'] = Url::getFromRoute('/table/operations');
 
-        /**
-         * Gets relation settings
-         */
-        $cfgRelation = $this->relation->getRelationsParam();
+        $relationParameters = $this->relation->getRelationParameters();
 
-        // reselect current db (needed in some cases probably due to
-        // the calling of PhpMyAdmin\Relation)
+        /**
+         * Reselect current db (needed in some cases probably due to the calling of {@link Relation})
+         */
         $this->dbi->selectDb($db);
 
         $reread_info = $pma_table->getStatusInfo(null, false);
@@ -141,10 +133,7 @@ class OperationsController extends AbstractController
             $create_options['page_checksum'] = $create_options['page_checksum'] ?? '';
         }
 
-        $pma_table = $this->dbi->getTable(
-            $db,
-            $table
-        );
+        $pma_table = $this->dbi->getTable($db, $table);
         $reread_info = false;
         $table_alters = [];
 
@@ -161,6 +150,10 @@ class OperationsController extends AbstractController
             $this->response->addJSON('message', $message);
 
             if ($message->isSuccess()) {
+                if (isset($_POST['submit_move'], $_POST['target_db'])) {
+                    $db = $_POST['target_db'];// Used in Header::getJsParams()
+                }
+
                 $this->response->addJSON('db', $db);
 
                 return;
@@ -181,9 +174,7 @@ class OperationsController extends AbstractController
             if (isset($_POST['new_name'])) {
                 // lower_case_table_names=1 `DB` becomes `db`
                 if ($lowerCaseNames) {
-                    $_POST['new_name'] = mb_strtolower(
-                        $_POST['new_name']
-                    );
+                    $_POST['new_name'] = mb_strtolower($_POST['new_name']);
                 }
 
                 // Get original names before rename operation
@@ -191,10 +182,7 @@ class OperationsController extends AbstractController
                 $oldDb = $pma_table->getDbName();
 
                 if ($pma_table->rename($_POST['new_name'])) {
-                    if (
-                        isset($_POST['adjust_privileges'])
-                        && ! empty($_POST['adjust_privileges'])
-                    ) {
+                    if (isset($_POST['adjust_privileges']) && ! empty($_POST['adjust_privileges'])) {
                         $this->operations->adjustPrivilegesRenameOrMoveTable(
                             $oldDb,
                             $oldTable,
@@ -248,26 +236,18 @@ class OperationsController extends AbstractController
             );
 
             if (count($table_alters) > 0) {
-                $sql_query      = 'ALTER TABLE '
+                $sql_query = 'ALTER TABLE '
                     . Util::backquote($table);
-                $sql_query     .= "\r\n" . implode("\r\n", $table_alters);
-                $sql_query     .= ';';
-                $result         = (bool) $this->dbi->query($sql_query);
-                $reread_info    = true;
+                $sql_query .= "\r\n" . implode("\r\n", $table_alters);
+                $sql_query .= ';';
+                $result = (bool) $this->dbi->query($sql_query);
+                $reread_info = true;
                 unset($table_alters);
                 $warning_messages = $this->operations->getWarningMessagesArray();
             }
 
-            if (
-                isset($_POST['tbl_collation'], $_POST['change_all_collations'])
-                && ! empty($_POST['tbl_collation'])
-                && ! empty($_POST['change_all_collations'])
-            ) {
-                $this->operations->changeAllColumnsCollation(
-                    $db,
-                    $table,
-                    $_POST['tbl_collation']
-                );
+            if (! empty($_POST['tbl_collation']) && ! empty($_POST['change_all_collations'])) {
+                $this->operations->changeAllColumnsCollation($db, $table, $_POST['tbl_collation']);
             }
 
             if (isset($_POST['tbl_collation']) && empty($_POST['tbl_collation'])) {
@@ -298,10 +278,7 @@ class OperationsController extends AbstractController
         /**
          * A partition operation has been requested by the user
          */
-        if (
-            isset($_POST['submit_partition'])
-            && ! empty($_POST['partition_operation'])
-        ) {
+        if (isset($_POST['submit_partition']) && ! empty($_POST['partition_operation'])) {
             $sql_query = QueryGenerator::getQueryForPartitioningTable(
                 $table,
                 $_POST['partition_operation'],
@@ -481,7 +458,7 @@ class OperationsController extends AbstractController
 
         $foreigners = $this->operations->getForeignersForReferentialIntegrityCheck(
             $urlParams,
-            (bool) $cfgRelation['relwork']
+            $relationParameters->relationFeature !== null
         );
 
         $this->render('table/operations/index', [

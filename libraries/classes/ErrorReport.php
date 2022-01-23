@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin;
 
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\Utils\HttpRequest;
 
 use function count;
@@ -77,17 +78,17 @@ class ErrorReport
      */
     public function getData(string $exceptionType = 'js'): array
     {
-        $relParams = $this->relation->getRelationsParam();
+        $relationParameters = $this->relation->getRelationParameters();
         // common params for both, php & js exceptions
         $report = [
             'pma_version' => Version::VERSION,
-            'browser_name' => PMA_USR_BROWSER_AGENT,
-            'browser_version' => PMA_USR_BROWSER_VER,
-            'user_os' => PMA_USR_OS,
+            'browser_name' => $this->config->get('PMA_USR_BROWSER_AGENT'),
+            'browser_version' => $this->config->get('PMA_USR_BROWSER_VER'),
+            'user_os' => $this->config->get('PMA_USR_OS'),
             'server_software' => $_SERVER['SERVER_SOFTWARE'] ?? null,
             'user_agent_string' => $_SERVER['HTTP_USER_AGENT'],
             'locale' => $this->config->getCookie('pma_lang'),
-            'configuration_storage' => $relParams['db'] === null ? 'disabled' : 'enabled',
+            'configuration_storage' => $relationParameters->db === null ? 'disabled' : 'enabled',
             'php_version' => PHP_VERSION,
         ];
 
@@ -126,20 +127,13 @@ class ErrorReport
             $errors = [];
             // create php error report
             $i = 0;
-            if (
-                ! isset($_SESSION['prev_errors'])
-                || $_SESSION['prev_errors'] == ''
-            ) {
+            if (! isset($_SESSION['prev_errors']) || $_SESSION['prev_errors'] == '') {
                 return [];
             }
 
             foreach ($_SESSION['prev_errors'] as $errorObj) {
                 /** @var Error $errorObj */
-                if (
-                    ! $errorObj->getLine()
-                    || ! $errorObj->getType()
-                    || $errorObj->getNumber() == E_USER_WARNING
-                ) {
+                if (! $errorObj->getLine() || ! $errorObj->getType() || $errorObj->getNumber() == E_USER_WARNING) {
                     continue;
                 }
 
@@ -187,10 +181,7 @@ class ErrorReport
             $components = [];
         }
 
-        if (
-            isset($components['fragment'])
-            && preg_match('<PMAURL-\d+:>', $components['fragment'], $matches)
-        ) {
+        if (isset($components['fragment']) && preg_match('<PMAURL-\d+:>', $components['fragment'], $matches)) {
             $uri = str_replace($matches[0], '', $components['fragment']);
             $url = 'https://example.com/' . $uri;
             $components = parse_url($url);
@@ -212,6 +203,7 @@ class ErrorReport
         if (isset($components['query'])) {
             parse_str($components['query'], $queryArray);
             unset($queryArray['db'], $queryArray['table'], $queryArray['token'], $queryArray['server']);
+            unset($queryArray['eq']);
             $query = http_build_query($queryArray);
         } else {
             $query = '';

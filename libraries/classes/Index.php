@@ -15,10 +15,10 @@ use function strlen;
  */
 class Index
 {
-    public const PRIMARY  = 1;
-    public const UNIQUE   = 2;
-    public const INDEX    = 4;
-    public const SPATIAL  = 8;
+    public const PRIMARY = 1;
+    public const UNIQUE = 2;
+    public const INDEX = 4;
+    public const SPATIAL = 8;
     public const FULLTEXT = 16;
 
     /**
@@ -162,38 +162,23 @@ class Index
     {
         $indexes = [];
         foreach (self::getFromTable($table, $schema) as $index) {
-            if (
-                ($choices & self::PRIMARY)
-                && $index->getChoice() === 'PRIMARY'
-            ) {
+            if (($choices & self::PRIMARY) && $index->getChoice() === 'PRIMARY') {
                 $indexes[] = $index;
             }
 
-            if (
-                ($choices & self::UNIQUE)
-                && $index->getChoice() === 'UNIQUE'
-            ) {
+            if (($choices & self::UNIQUE) && $index->getChoice() === 'UNIQUE') {
                 $indexes[] = $index;
             }
 
-            if (
-                ($choices & self::INDEX)
-                && $index->getChoice() === 'INDEX'
-            ) {
+            if (($choices & self::INDEX) && $index->getChoice() === 'INDEX') {
                 $indexes[] = $index;
             }
 
-            if (
-                ($choices & self::SPATIAL)
-                && $index->getChoice() === 'SPATIAL'
-            ) {
+            if (($choices & self::SPATIAL) && $index->getChoice() === 'SPATIAL') {
                 $indexes[] = $index;
             }
 
-            if (
-                (! ($choices & self::FULLTEXT))
-                || $index->getChoice() !== 'FULLTEXT'
-            ) {
+            if ((! ($choices & self::FULLTEXT)) || $index->getChoice() !== 'FULLTEXT') {
                 continue;
             }
 
@@ -227,10 +212,8 @@ class Index
      *
      * @param string $table  table
      * @param string $schema schema
-     *
-     * @return bool whether loading was successful
      */
-    private static function loadIndexes($table, $schema)
+    private static function loadIndexes($table, $schema): bool
     {
         global $dbi;
 
@@ -259,29 +242,28 @@ class Index
      * Add column to index
      *
      * @param array $params column params
-     *
-     * @return void
      */
-    public function addColumn(array $params)
+    public function addColumn(array $params): void
     {
-        if (
-            ! isset($params['Column_name'])
-            || strlen($params['Column_name']) <= 0
-        ) {
+        $key = $params['Column_name'] ?? $params['Expression'] ?? '';
+        if (isset($params['Expression'])) {
+            // The Expression only does not make the key unique, add a sequence number
+            $key .= $params['Seq_in_index'];
+        }
+
+        if (strlen($key) <= 0) {
             return;
         }
 
-        $this->columns[$params['Column_name']] = new IndexColumn($params);
+        $this->columns[$key] = new IndexColumn($params);
     }
 
     /**
      * Adds a list of columns to the index
      *
      * @param array $columns array containing details about the columns
-     *
-     * @return void
      */
-    public function addColumns(array $columns)
+    public function addColumns(array $columns): void
     {
         $_columns = [];
 
@@ -292,8 +274,8 @@ class Index
             foreach ($columns['names'] as $key => $name) {
                 $sub_part = $columns['sub_parts'][$key] ?? '';
                 $_columns[] = [
-                    'Column_name'   => $name,
-                    'Sub_part'      => $sub_part,
+                    'Column_name' => $name,
+                    'Sub_part' => $sub_part,
                 ];
             }
         } else {
@@ -313,10 +295,8 @@ class Index
      * Returns true if $column indexed in this index
      *
      * @param string $column the column
-     *
-     * @return bool true if $column indexed in this index
      */
-    public function hasColumn($column)
+    public function hasColumn($column): bool
     {
         return isset($this->columns[$column]);
     }
@@ -325,10 +305,8 @@ class Index
      * Sets index details
      *
      * @param array $params index details
-     *
-     * @return void
      */
-    public function set(array $params)
+    public function set(array $params): void
     {
         if (isset($params['columns'])) {
             $this->addColumns($params['columns']);
@@ -571,10 +549,8 @@ class Index
      * Sets the name of the index
      *
      * @param string $name index name
-     *
-     * @return void
      */
-    public function setName($name)
+    public function setName($name): void
     {
         $this->name = (string) $name;
     }
@@ -597,8 +573,8 @@ class Index
     public function getCompareData()
     {
         $data = [
-            'Packed'        => $this->packed,
-            'Index_choice'    => $this->choice,
+            'Packed' => $this->packed,
+            'Index_choice' => $this->choice,
         ];
 
         foreach ($this->columns as $column) {
@@ -615,14 +591,12 @@ class Index
      * @param string $schema schema name
      *
      * @return string  Output HTML
-     *
-     * @access public
      */
     public static function findDuplicates($table, $schema)
     {
         $indexes = self::getFromTable($table, $schema);
 
-        $output  = '';
+        $output = '';
 
         // count($indexes) < 2:
         //   there is no need to check if there less than two indexes
@@ -634,9 +608,7 @@ class Index
         while ($while_index = array_pop($indexes)) {
             // ... compare with every remaining index in stack
             foreach ($indexes as $each_index) {
-                if (
-                    $each_index->getCompareData() !== $while_index->getCompareData()
-                ) {
+                if ($each_index->getCompareData() !== $while_index->getCompareData()) {
                     continue;
                 }
 
@@ -645,8 +617,7 @@ class Index
 
                 $message = Message::notice(
                     __(
-                        'The indexes %1$s and %2$s seem to be equal and one of them '
-                        . 'could possibly be removed.'
+                        'The indexes %1$s and %2$s seem to be equal and one of them could possibly be removed.'
                     )
                 );
                 $message->addParam($each_index->getName());

@@ -9,9 +9,9 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Navigation;
 
 use PhpMyAdmin\Config\PageSettings;
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\DatabaseInterface;
-use PhpMyAdmin\Relation;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Sanitize;
 use PhpMyAdmin\Server\Select;
 use PhpMyAdmin\Template;
@@ -77,7 +77,7 @@ class Navigation
             'source' => '',
         ];
 
-        $response = Response::getInstance();
+        $response = ResponseRenderer::getInstance();
         if (! $response->isAjax()) {
             $logo['source'] = $this->getLogoSource();
             $logo['has_link'] = (string) $cfg['NavigationLogoLink'] !== '';
@@ -113,11 +113,7 @@ class Navigation
             }
         }
 
-        if (
-            ! $response->isAjax()
-            || ! empty($_POST['full'])
-            || ! empty($_POST['reload'])
-        ) {
+        if (! $response->isAjax() || ! empty($_POST['full']) || ! empty($_POST['reload'])) {
             if ($cfg['ShowDatabasesNavigationAsTree']) {
                 // provide database tree in navigation
                 $navRender = $this->tree->renderState();
@@ -156,17 +152,20 @@ class Navigation
      * @param string $itemType  type of the navigation tree item
      * @param string $dbName    database name
      * @param string $tableName table name if applicable
-     *
-     * @return void
      */
     public function hideNavigationItem(
         $itemName,
         $itemType,
         $dbName,
         $tableName = null
-    ) {
-        $navTable = Util::backquote($GLOBALS['cfgRelation']['db'])
-            . '.' . Util::backquote($GLOBALS['cfgRelation']['navigationhiding']);
+    ): void {
+        $navigationItemsHidingFeature = $this->relation->getRelationParameters()->navigationItemsHidingFeature;
+        if ($navigationItemsHidingFeature === null) {
+            return;
+        }
+
+        $navTable = Util::backquote($navigationItemsHidingFeature->database)
+            . '.' . Util::backquote($navigationItemsHidingFeature->navigationHiding);
         $sqlQuery = 'INSERT INTO ' . $navTable
             . '(`username`, `item_name`, `item_type`, `db_name`, `table_name`)'
             . ' VALUES ('
@@ -176,7 +175,7 @@ class Navigation
             . "'" . $this->dbi->escapeString($dbName) . "',"
             . "'" . (! empty($tableName) ? $this->dbi->escapeString($tableName) : '' )
             . "')";
-        $this->relation->queryAsControlUser($sqlQuery, false);
+        $this->dbi->tryQueryAsControlUser($sqlQuery);
     }
 
     /**
@@ -187,17 +186,20 @@ class Navigation
      * @param string $itemType  type of the navigation tree item
      * @param string $dbName    database name
      * @param string $tableName table name if applicable
-     *
-     * @return void
      */
     public function unhideNavigationItem(
         $itemName,
         $itemType,
         $dbName,
         $tableName = null
-    ) {
-        $navTable = Util::backquote($GLOBALS['cfgRelation']['db'])
-            . '.' . Util::backquote($GLOBALS['cfgRelation']['navigationhiding']);
+    ): void {
+        $navigationItemsHidingFeature = $this->relation->getRelationParameters()->navigationItemsHidingFeature;
+        if ($navigationItemsHidingFeature === null) {
+            return;
+        }
+
+        $navTable = Util::backquote($navigationItemsHidingFeature->database)
+            . '.' . Util::backquote($navigationItemsHidingFeature->navigationHiding);
         $sqlQuery = 'DELETE FROM ' . $navTable
             . ' WHERE'
             . " `username`='"
@@ -209,7 +211,7 @@ class Navigation
                 ? " AND `table_name`='" . $this->dbi->escapeString($tableName) . "'"
                 : ''
             );
-        $this->relation->queryAsControlUser($sqlQuery, false);
+        $this->dbi->tryQueryAsControlUser($sqlQuery);
     }
 
     /**
@@ -251,19 +253,24 @@ class Navigation
      */
     private function getHiddenItems(string $database, ?string $table): array
     {
-        $navTable = Util::backquote($GLOBALS['cfgRelation']['db'])
-            . '.' . Util::backquote($GLOBALS['cfgRelation']['navigationhiding']);
+        $navigationItemsHidingFeature = $this->relation->getRelationParameters()->navigationItemsHidingFeature;
+        if ($navigationItemsHidingFeature === null) {
+            return [];
+        }
+
+        $navTable = Util::backquote($navigationItemsHidingFeature->database)
+            . '.' . Util::backquote($navigationItemsHidingFeature->navigationHiding);
         $sqlQuery = 'SELECT `item_name`, `item_type` FROM ' . $navTable
             . " WHERE `username`='"
             . $this->dbi->escapeString($GLOBALS['cfg']['Server']['user']) . "'"
             . " AND `db_name`='" . $this->dbi->escapeString($database) . "'"
             . " AND `table_name`='"
             . (! empty($table) ? $this->dbi->escapeString($table) : '') . "'";
-        $result = $this->relation->queryAsControlUser($sqlQuery, false);
+        $result = $this->dbi->tryQueryAsControlUser($sqlQuery);
 
         $hidden = [];
         if ($result) {
-            while ($row = $this->dbi->fetchArray($result)) {
+            foreach ($result as $row) {
                 $type = $row['item_type'];
                 if (! isset($hidden[$type])) {
                     $hidden[$type] = [];
@@ -272,8 +279,6 @@ class Navigation
                 $hidden[$type][] = $row['item_name'];
             }
         }
-
-        $this->dbi->freeResult($result);
 
         return $hidden;
     }

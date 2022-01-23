@@ -14,7 +14,6 @@ use function __;
 /**
  * JSON editing with syntax highlighted CodeMirror editor
  */
-// @codingStandardsIgnoreLine
 class Text_Plain_JsonEditor extends CodeMirrorEditorTransformationPlugin
 {
     /**
@@ -24,9 +23,7 @@ class Text_Plain_JsonEditor extends CodeMirrorEditorTransformationPlugin
      */
     public static function getInfo()
     {
-        return __(
-            'Syntax highlighted CodeMirror editor for JSON.'
-        );
+        return __('Syntax highlighted CodeMirror editor for JSON.');
     }
 
     /**

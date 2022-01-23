@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin\Tests;
 
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 
 /**
- * @covers \PhpMyAdmin\Response
+ * @covers \PhpMyAdmin\ResponseRenderer
  */
 class ResponseTest extends AbstractTestCase
 {
@@ -15,7 +15,6 @@ class ResponseTest extends AbstractTestCase
     {
         parent::setUp();
 
-        $GLOBALS['config']->enableBc();
         $GLOBALS['lang'] = 'en';
         $GLOBALS['server'] = 1;
         $GLOBALS['text_dir'] = 'ltr';
@@ -25,7 +24,7 @@ class ResponseTest extends AbstractTestCase
     public function testSetAjax(): void
     {
         $_REQUEST = [];
-        $response = Response::getInstance();
+        $response = ResponseRenderer::getInstance();
         $response->setAjax(true);
         $this->assertTrue($response->isAjax());
         $response->setAjax(false);

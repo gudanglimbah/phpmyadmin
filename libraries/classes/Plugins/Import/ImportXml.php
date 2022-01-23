@@ -34,50 +34,41 @@ use const PHP_VERSION_ID;
  */
 class ImportXml extends ImportPlugin
 {
-    public function __construct()
+    /**
+     * @psalm-return non-empty-lowercase-string
+     */
+    public function getName(): string
     {
-        parent::__construct();
-        $this->setProperties();
+        return 'xml';
     }
 
-    /**
-     * Sets the import plugin properties.
-     * Called in the constructor.
-     *
-     * @return void
-     */
-    protected function setProperties()
+    protected function setProperties(): ImportPluginProperties
     {
         $importPluginProperties = new ImportPluginProperties();
         $importPluginProperties->setText(__('XML'));
         $importPluginProperties->setExtension('xml');
         $importPluginProperties->setMimeType('text/xml');
-        $importPluginProperties->setOptions([]);
         $importPluginProperties->setOptionsText(__('Options'));
 
-        $this->properties = $importPluginProperties;
+        return $importPluginProperties;
     }
 
     /**
      * Handles the whole import logic
      *
      * @param array $sql_data 2-element array with sql data
-     *
-     * @return void
      */
-    public function doImport(?File $importHandle = null, array &$sql_data = [])
+    public function doImport(?File $importHandle = null, array &$sql_data = []): void
     {
         global $error, $timeout_passed, $finished, $db;
 
-        $i = 0;
-        $len = 0;
         $buffer = '';
 
         /**
          * Read in the file via Import::getNextChunk so that
          * it can process compressed files
          */
-        while (! ($finished && $i >= $len) && ! $error && ! $timeout_passed) {
+        while (! $finished && ! $error && ! $timeout_passed) {
             $data = $this->import->getNextChunk($importHandle);
             if ($data === false) {
                 /* subtract data we didn't handle yet and stop processing */
@@ -108,7 +99,7 @@ class ImportXml extends ImportPlugin
          * result in increased performance without the need to
          * alter the code in any way. It's basically a freebee.
          */
-        $xml = @simplexml_load_string($buffer, 'SimpleXMLElement', LIBXML_COMPACT);
+        $xml = @simplexml_load_string($buffer, SimpleXMLElement::class, LIBXML_COMPACT);
 
         unset($buffer);
 
@@ -118,8 +109,7 @@ class ImportXml extends ImportPlugin
         if ($xml === false) {
             echo Message::error(
                 __(
-                    'The XML file specified was either malformed or incomplete.'
-                    . ' Please correct the issue and try again.'
+                    'The XML file specified was either malformed or incomplete. Please correct the issue and try again.'
                 )
             )->getDisplay();
             unset($xml);
@@ -182,8 +172,7 @@ class ImportXml extends ImportPlugin
         if ($db_name === '') {
             echo Message::error(
                 __(
-                    'The XML file specified was either malformed or incomplete.'
-                    . ' Please correct the issue and try again.'
+                    'The XML file specified was either malformed or incomplete. Please correct the issue and try again.'
                 )
             )->getDisplay();
             unset($xml);
@@ -205,9 +194,7 @@ class ImportXml extends ImportPlugin
 
             $create = [];
 
-            /** @var SimpleXMLElement $val1 */
             foreach ($struct as $val1) {
-                /** @var SimpleXMLElement $val2 */
                 foreach ($val1 as $val2) {
                     // Need to select the correct database for the creation of
                     // tables, views, triggers, etc.
@@ -249,6 +236,7 @@ class ImportXml extends ImportPlugin
              * Process all database content
              */
             foreach ($xml as $v1) {
+                /** @psalm-suppress PossiblyNullReference */
                 $tbl_attr = $v1->attributes();
 
                 $isInTables = false;
@@ -265,6 +253,7 @@ class ImportXml extends ImportPlugin
                 }
 
                 foreach ($v1 as $v2) {
+                    /** @psalm-suppress PossiblyNullReference */
                     $row_attr = $v2->attributes();
                     if (! in_array((string) $row_attr['name'], $tempRow)) {
                         $tempRow[] = (string) $row_attr['name'];
@@ -357,7 +346,7 @@ class ImportXml extends ImportPlugin
             /* Set database collation/charset */
             $options = [
                 'db_collation' => $collation,
-                'db_charset'   => $charset,
+                'db_charset' => $charset,
             ];
         }
 

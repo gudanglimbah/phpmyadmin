@@ -21,7 +21,6 @@ class PageSettingsTest extends AbstractTestCase
         parent::setLanguage();
         parent::setGlobalConfig();
         parent::setTheme();
-        $GLOBALS['config']->enableBc();
         $GLOBALS['server'] = 1;
         $GLOBALS['db'] = 'db';
         $GLOBALS['table'] = '';
@@ -54,15 +53,12 @@ class PageSettingsTest extends AbstractTestCase
             '<div id="page_settings_modal">'
             . '<div class="page_settings">'
             . '<form method="post" '
-            . 'action="index.php?db=db&server=1&lang=en" '
+            . 'action="index.php&#x3F;db&#x3D;db&amp;server&#x3D;1&amp;lang&#x3D;en" '
             . 'class="config-form disableAjax">',
             $html
         );
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="submit_save" value="Browse">',
-            $html
-        );
+        $this->assertStringContainsString('<input type="hidden" name="submit_save" value="Browse">', $html);
 
         $this->assertStringContainsString(
             "registerFieldValidator('MaxRows', 'validatePositiveNumber', true);\n"
@@ -82,14 +78,8 @@ class PageSettingsTest extends AbstractTestCase
         $html = $pageSettings->getHTML();
 
         // Test some sample parts
-        $this->assertStringContainsString(
-            '<div id="pma_navigation_settings">',
-            $html
-        );
+        $this->assertStringContainsString('<div id="pma_navigation_settings">', $html);
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="submit_save" value="Navi">',
-            $html
-        );
+        $this->assertStringContainsString('<input type="hidden" name="submit_save" value="Navi">', $html);
     }
 }

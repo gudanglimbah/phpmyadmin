@@ -102,10 +102,7 @@ class GisVisualizationTest extends AbstractTestCase
             ]
         );
 
-        $this->assertEquals(
-            'SELECT ASTEXT(`abc`) AS `abc`, SRID(`abc`) AS `srid` FROM () AS `temp_gis`',
-            $queryString
-        );
+        $this->assertEquals('SELECT ASTEXT(`abc`) AS `abc`, SRID(`abc`) AS `srid` FROM () AS `temp_gis`', $queryString);
     }
 
     /**
@@ -135,13 +132,13 @@ class GisVisualizationTest extends AbstractTestCase
     }
 
     /**
-     * Modify the query for an MySQL 8.1 version
+     * Modify the query for an MySQL 8.0.1 version
      */
     public function testModifyQueryVersion8(): void
     {
         $queryString = $this->callFunction(
             GisVisualization::getByData([], [
-                'mysqlVersion' => 80010,
+                'mysqlVersion' => 80001,
                 'spatialColumn' => 'abc',
                 'isMariaDB' => false,
             ]),

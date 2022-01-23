@@ -26,10 +26,8 @@ class Index
 {
     /**
      * Initializes message list
-     *
-     * @return void
      */
-    public static function messagesBegin()
+    public static function messagesBegin(): void
     {
         if (! isset($_SESSION['messages']) || ! is_array($_SESSION['messages'])) {
             $_SESSION['messages'] = [
@@ -54,10 +52,8 @@ class Index
      * @param string $msgId   unique message identifier
      * @param string $title   language string id (in $str array)
      * @param string $message message text
-     *
-     * @return void
      */
-    public static function messagesSet($type, $msgId, $title, $message)
+    public static function messagesSet($type, $msgId, $title, $message): void
     {
         $fresh = ! isset($_SESSION['messages'][$type][$msgId]);
         $_SESSION['messages'][$type][$msgId] = [
@@ -70,14 +66,12 @@ class Index
 
     /**
      * Cleans up message list
-     *
-     * @return void
      */
-    public static function messagesEnd()
+    public static function messagesEnd(): void
     {
         foreach ($_SESSION['messages'] as &$messages) {
             $remove_ids = [];
-            foreach ($messages as $id => &$msg) {
+            foreach ($messages as $id => $msg) {
                 if ($msg['active'] != false) {
                     continue;
                 }
@@ -116,10 +110,8 @@ class Index
 
     /**
      * Checks for newest phpMyAdmin version and sets result as a new notice
-     *
-     * @return void
      */
-    public static function versionCheck()
+    public static function versionCheck(): void
     {
         // version check messages should always be visible so let's make
         // a unique message id each time we run it
@@ -135,8 +127,7 @@ class Index
                 $message_id,
                 __('Version check'),
                 __(
-                    'Reading of version failed. '
-                    . 'Maybe you\'re offline or the upgrade server does not respond.'
+                    'Reading of version failed. Maybe you\'re offline or the upgrade server does not respond.'
                 )
             );
 

@@ -29,7 +29,6 @@ class AuthenticationConfigTest extends AbstractTestCase
         parent::setLanguage();
         parent::setGlobalConfig();
         parent::setTheme();
-        $GLOBALS['config']->enableBc();
         $GLOBALS['server'] = 0;
         $GLOBALS['db'] = 'db';
         $GLOBALS['table'] = 'table';
@@ -105,10 +104,7 @@ class AuthenticationConfigTest extends AbstractTestCase
             $html
         );
 
-        $this->assertStringContainsString(
-            'Cannot connect: invalid settings.',
-            $html
-        );
+        $this->assertStringContainsString('Cannot connect: invalid settings.', $html);
 
         $this->assertStringContainsString(
             '<a href="index.php?route=/&server=0&lang=en" '

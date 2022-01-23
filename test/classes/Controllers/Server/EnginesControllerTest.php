@@ -5,14 +5,9 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Tests\Controllers\Server;
 
 use PhpMyAdmin\Controllers\Server\EnginesController;
-use PhpMyAdmin\Html\MySQLDocumentation;
-use PhpMyAdmin\StorageEngine;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Tests\AbstractTestCase;
-use PhpMyAdmin\Tests\Stubs\Response;
-
-use function __;
-use function htmlspecialchars;
+use PhpMyAdmin\Tests\Stubs\ResponseRenderer;
 
 /**
  * @covers \PhpMyAdmin\Controllers\Server\EnginesController
@@ -28,7 +23,6 @@ class EnginesControllerTest extends AbstractTestCase
         $GLOBALS['text_dir'] = 'ltr';
         parent::setGlobalConfig();
         parent::setTheme();
-        $GLOBALS['config']->enableBc();
 
         $GLOBALS['server'] = 1;
         $GLOBALS['db'] = 'db';
@@ -41,96 +35,25 @@ class EnginesControllerTest extends AbstractTestCase
     {
         global $dbi;
 
-        $response = new Response();
+        $response = new ResponseRenderer();
 
         $controller = new EnginesController($response, new Template(), $dbi);
 
-        $controller->index();
+        $this->dummyDbi->addSelectDb('mysql');
+        $controller->__invoke();
+        $this->assertAllSelectsConsumed();
+
         $actual = $response->getHTMLResult();
 
-        $this->assertStringContainsString(
-            '<th scope="col">Storage Engine</th>',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<th scope="col">Description</th>',
-            $actual
-        );
+        $this->assertStringContainsString('<th scope="col">Storage Engine</th>', $actual);
+        $this->assertStringContainsString('<th scope="col">Description</th>', $actual);
 
-        $this->assertStringContainsString(
-            '<td>Federated MySQL storage engine</td>',
-            $actual
-        );
-        $this->assertStringContainsString(
-            'FEDERATED',
-            $actual
-        );
-        $this->assertStringContainsString(
-            'index.php?route=/server/engines/FEDERATED',
-            $actual
-        );
+        $this->assertStringContainsString('<td>Federated MySQL storage engine</td>', $actual);
+        $this->assertStringContainsString('FEDERATED', $actual);
+        $this->assertStringContainsString('index.php?route=/server/engines/FEDERATED', $actual);
 
-        $this->assertStringContainsString(
-            '<td>dummy comment</td>',
-            $actual
-        );
-        $this->assertStringContainsString(
-            'dummy',
-            $actual
-        );
-        $this->assertStringContainsString(
-            'index.php?route=/server/engines/dummy',
-            $actual
-        );
-    }
-
-    public function testShow(): void
-    {
-        global $dbi;
-
-        $response = new Response();
-
-        $controller = new EnginesController($response, new Template(), $dbi);
-
-        $controller->show([
-            'engine' => 'Pbxt',
-            'page' => 'page',
-        ]);
-        $actual = $response->getHTMLResult();
-
-        $enginePlugin = StorageEngine::getEngine('Pbxt');
-
-        $this->assertStringContainsString(
-            htmlspecialchars($enginePlugin->getTitle()),
-            $actual
-        );
-
-        $this->assertStringContainsString(
-            MySQLDocumentation::show($enginePlugin->getMysqlHelpPage()),
-            $actual
-        );
-
-        $this->assertStringContainsString(
-            htmlspecialchars($enginePlugin->getComment()),
-            $actual
-        );
-
-        $this->assertStringContainsString(
-            __('Variables'),
-            $actual
-        );
-        $this->assertStringContainsString(
-            'index.php?route=/server/engines/Pbxt/Documentation',
-            $actual
-        );
-        $this->assertStringContainsString(
-            $enginePlugin->getSupportInformationMessage(),
-            $actual
-        );
-        $this->assertStringContainsString(
-            'There is no detailed status information available for this '
-            . 'storage engine.',
-            $actual
-        );
+        $this->assertStringContainsString('<td>dummy comment</td>', $actual);
+        $this->assertStringContainsString('dummy', $actual);
+        $this->assertStringContainsString('index.php?route=/server/engines/dummy', $actual);
     }
 }

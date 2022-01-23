@@ -9,13 +9,14 @@ use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Gis\GisVisualization;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Message;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
 
 use function __;
 use function array_merge;
+use function is_array;
 
 /**
  * Handles creation of the GIS visualizations.
@@ -28,19 +29,18 @@ final class GisVisualizationController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name.
-     * @param string            $table    Table name.
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, $db, $table, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        string $db,
+        string $table,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template, $db, $table);
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $cfg, $urlParams, $db, $errorUrl;
 
@@ -67,7 +67,7 @@ final class GisVisualizationController extends AbstractController
         if ($sqlQuery == '') {
             $this->response->setRequestStatus(false);
             $this->response->addHTML(
-                Message::error(__('No SQL query was set to fetch data.'))
+                Message::error(__('No SQL query was set to fetch data.'))->getDisplay()
             );
 
             return;
@@ -76,7 +76,10 @@ final class GisVisualizationController extends AbstractController
         // Execute the query and return the result
         $result = $this->dbi->tryQuery($sqlQuery);
         // Get the meta data of results
-        $meta = $this->dbi->getFieldsMeta($result) ?? [];
+        $meta = [];
+        if ($result !== false) {
+            $meta = $this->dbi->getFieldsMeta($result);
+        }
 
         // Find the candidate fields for label column and spatial column
         $labelCandidates = [];
@@ -91,18 +94,18 @@ final class GisVisualizationController extends AbstractController
 
         // Get settings if any posted
         $visualizationSettings = [];
-        if (Core::isValid($_POST['visualizationSettings'], 'array')) {
+        // Download as PNG/SVG/PDF use _GET and the normal form uses _POST
+        if (isset($_POST['visualizationSettings']) && is_array($_POST['visualizationSettings'])) {
             $visualizationSettings = $_POST['visualizationSettings'];
+        } elseif (isset($_GET['visualizationSettings']) && is_array($_GET['visualizationSettings'])) {
+            $visualizationSettings = $_GET['visualizationSettings'];
         }
 
         // Check mysql version
         $visualizationSettings['mysqlVersion'] = $this->dbi->getVersion();
         $visualizationSettings['isMariaDB'] = $this->dbi->isMariaDB();
 
-        if (
-            ! isset($visualizationSettings['labelColumn'])
-            && isset($labelCandidates[0])
-        ) {
+        if (! isset($visualizationSettings['labelColumn']) && isset($labelCandidates[0])) {
             $visualizationSettings['labelColumn'] = '';
         }
 
@@ -111,24 +114,20 @@ final class GisVisualizationController extends AbstractController
             $visualizationSettings['spatialColumn'] = $spatialCandidates[0];
         }
 
+        // Download as PNG/SVG/PDF use _GET and the normal form uses _POST
         // Convert geometric columns from bytes to text.
-        $pos = $_GET['pos'] ?? $_SESSION['tmpval']['pos'];
-        if (isset($_GET['session_max_rows'])) {
-            $rows = $_GET['session_max_rows'];
+        $pos = (int) ($_POST['pos'] ?? $_GET['pos'] ?? $_SESSION['tmpval']['pos']);
+        if (isset($_POST['session_max_rows']) || isset($_GET['session_max_rows'])) {
+            $rows = (int) ($_POST['session_max_rows'] ?? $_GET['session_max_rows']);
         } else {
             if ($_SESSION['tmpval']['max_rows'] !== 'all') {
-                $rows = $_SESSION['tmpval']['max_rows'];
+                $rows = (int) $_SESSION['tmpval']['max_rows'];
             } else {
-                $rows = $GLOBALS['cfg']['MaxRows'];
+                $rows = (int) $GLOBALS['cfg']['MaxRows'];
             }
         }
 
-        $this->visualization = GisVisualization::get(
-            $sqlQuery,
-            $visualizationSettings,
-            $rows,
-            $pos
-        );
+        $this->visualization = GisVisualization::get($sqlQuery, $visualizationSettings, $rows, $pos);
 
         if (isset($_GET['saveToFile'])) {
             $this->saveToFile($visualizationSettings['spatialColumn'], $_GET['fileFormat']);
@@ -165,10 +164,7 @@ final class GisVisualizationController extends AbstractController
         /**
          * Displays the page
          */
-        $urlParams['goto'] = Util::getScriptNameForOption(
-            $cfg['DefaultTabDatabase'],
-            'database'
-        );
+        $urlParams['goto'] = Util::getScriptNameForOption($cfg['DefaultTabDatabase'], 'database');
         $urlParams['back'] = Url::getFromRoute('/sql');
         $urlParams['sql_query'] = $sqlQuery;
         $urlParams['sql_signature'] = Core::signSqlQuery($sqlQuery);
@@ -178,6 +174,8 @@ final class GisVisualizationController extends AbstractController
                 'saveToFile' => true,
                 'session_max_rows' => $rows,
                 'pos' => $pos,
+                'visualizationSettings[spatialColumn]' => $visualizationSettings['spatialColumn'],
+                'visualizationSettings[labelColumn]' => $visualizationSettings['labelColumn'],
             ]
         ));
 

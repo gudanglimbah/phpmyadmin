@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin\Tests\Plugins\Export;
 
+use PhpMyAdmin\ConfigStorage\Relation;
+use PhpMyAdmin\ConfigStorage\RelationParameters;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Plugins\Export\ExportTexytext;
 use PhpMyAdmin\Properties\Options\Groups\OptionsPropertyMainGroup;
@@ -12,9 +14,7 @@ use PhpMyAdmin\Properties\Options\Items\BoolPropertyItem;
 use PhpMyAdmin\Properties\Options\Items\RadioPropertyItem;
 use PhpMyAdmin\Properties\Options\Items\TextPropertyItem;
 use PhpMyAdmin\Properties\Plugins\ExportPluginProperties;
-use PhpMyAdmin\Relation;
 use PhpMyAdmin\Tests\AbstractTestCase;
-use PhpMyAdmin\Version;
 use ReflectionMethod;
 use ReflectionProperty;
 
@@ -37,7 +37,6 @@ class ExportTexytextTest extends AbstractTestCase
     protected function setUp(): void
     {
         parent::setUp();
-        parent::loadDefaultConfig();
         $GLOBALS['server'] = 0;
         $GLOBALS['output_kanji_conversion'] = false;
         $GLOBALS['buffer_needed'] = false;
@@ -46,7 +45,6 @@ class ExportTexytextTest extends AbstractTestCase
         $GLOBALS['plugin_param'] = [];
         $GLOBALS['plugin_param']['export_type'] = 'table';
         $GLOBALS['plugin_param']['single_table'] = false;
-        $GLOBALS['cfgRelation']['relation'] = true;
         $GLOBALS['db'] = '';
         $GLOBALS['table'] = '';
         $GLOBALS['lang'] = 'en';
@@ -75,10 +73,7 @@ class ExportTexytextTest extends AbstractTestCase
         $attrProperties->setAccessible(true);
         $properties = $attrProperties->getValue($this->object);
 
-        $this->assertInstanceOf(
-            ExportPluginProperties::class,
-            $properties
-        );
+        $this->assertInstanceOf(ExportPluginProperties::class, $properties);
 
         $this->assertEquals(
             'Texy! text',
@@ -97,10 +92,7 @@ class ExportTexytextTest extends AbstractTestCase
 
         $options = $properties->getOptions();
 
-        $this->assertInstanceOf(
-            OptionsPropertyRootGroup::class,
-            $options
-        );
+        $this->assertInstanceOf(OptionsPropertyRootGroup::class, $options);
 
         $this->assertEquals(
             'Format Specific Options',
@@ -111,10 +103,7 @@ class ExportTexytextTest extends AbstractTestCase
 
         $generalOptions = array_shift($generalOptionsArray);
 
-        $this->assertInstanceOf(
-            OptionsPropertyMainGroup::class,
-            $generalOptions
-        );
+        $this->assertInstanceOf(OptionsPropertyMainGroup::class, $generalOptions);
 
         $this->assertEquals(
             'general_opts',
@@ -130,17 +119,11 @@ class ExportTexytextTest extends AbstractTestCase
 
         $property = array_shift($generalProperties);
 
-        $this->assertInstanceOf(
-            RadioPropertyItem::class,
-            $property
-        );
+        $this->assertInstanceOf(RadioPropertyItem::class, $property);
 
         $generalOptions = array_shift($generalOptionsArray);
 
-        $this->assertInstanceOf(
-            OptionsPropertyMainGroup::class,
-            $generalOptions
-        );
+        $this->assertInstanceOf(OptionsPropertyMainGroup::class, $generalOptions);
 
         $this->assertEquals(
             'data',
@@ -151,10 +134,7 @@ class ExportTexytextTest extends AbstractTestCase
 
         $property = array_shift($generalProperties);
 
-        $this->assertInstanceOf(
-            BoolPropertyItem::class,
-            $property
-        );
+        $this->assertInstanceOf(BoolPropertyItem::class, $property);
 
         $this->assertEquals(
             'columns',
@@ -163,10 +143,7 @@ class ExportTexytextTest extends AbstractTestCase
 
         $property = array_shift($generalProperties);
 
-        $this->assertInstanceOf(
-            TextPropertyItem::class,
-            $property
-        );
+        $this->assertInstanceOf(TextPropertyItem::class, $property);
 
         $this->assertEquals(
             'null',
@@ -190,9 +167,7 @@ class ExportTexytextTest extends AbstractTestCase
 
     public function testExportDBHeader(): void
     {
-        $this->expectOutputString(
-            "===Database testDb\n\n"
-        );
+        $this->expectOutputString("===Database testDb\n\n");
         $this->assertTrue(
             $this->object->exportDBHeader('testDb')
         );
@@ -245,7 +220,9 @@ class ExportTexytextTest extends AbstractTestCase
 
     public function testGetTableDefStandIn(): void
     {
+        $this->dummyDbi->addSelectDb('test_db');
         $result = $this->object->getTableDefStandIn('test_db', 'test_table', "\n");
+        $this->assertAllSelectsConsumed();
 
         $this->assertEquals(
             '|------' . "\n"
@@ -330,31 +307,19 @@ class ExportTexytextTest extends AbstractTestCase
             ->with(['Field' => 'fname', 'Comment' => 'comm'], ['cname'])
             ->will($this->returnValue(1));
 
-        $GLOBALS['cfgRelation']['relation'] = true;
-        $_SESSION['relation'][0] = [
-            'version' => Version::VERSION,
+        $_SESSION['relation'] = [];
+        $_SESSION['relation'][$GLOBALS['server']] = RelationParameters::fromArray([
             'relwork' => true,
             'commwork' => true,
             'mimework' => true,
-            'db' => 'db',
+            'db' => 'database',
             'relation' => 'rel',
             'column_info' => 'col',
-        ];
+        ])->toArray();
 
-        $result = $this->object->getTableDef(
-            'db',
-            'table',
-            "\n",
-            'example.com',
-            true,
-            true,
-            true
-        );
+        $result = $this->object->getTableDef('db', 'table', "\n", 'example.com', true, true, true);
 
-        $this->assertStringContainsString(
-            '1|&lt;ftable (ffield&gt;)|comm|Test&lt;',
-            $result
-        );
+        $this->assertStringContainsString('1|&lt;ftable (ffield&gt;)|comm|Test&lt;', $result);
     }
 
     public function testGetTriggers(): void
@@ -381,21 +346,16 @@ class ExportTexytextTest extends AbstractTestCase
 
         $result = $this->object->getTriggers('database', 'ta<ble');
 
-        $this->assertStringContainsString(
-            '|tna"me|ac>t|manip&|def',
-            $result
-        );
+        $this->assertStringContainsString('|tna"me|ac>t|manip&|def', $result);
 
-        $this->assertStringContainsString(
-            '|Name|Time|Event|Definition',
-            $result
-        );
+        $this->assertStringContainsString('|Name|Time|Event|Definition', $result);
     }
 
     public function testExportStructure(): void
     {
         // case 1
         ob_start();
+        $this->dummyDbi->addSelectDb('test_db');
         $this->assertTrue(
             $this->object->exportStructure(
                 'test_db',
@@ -406,6 +366,7 @@ class ExportTexytextTest extends AbstractTestCase
                 'test'
             )
         );
+        $this->assertAllSelectsConsumed();
         $result = ob_get_clean();
 
         $this->assertIsString($result);
@@ -445,6 +406,7 @@ class ExportTexytextTest extends AbstractTestCase
 
         // case 3
         ob_start();
+        $this->dummyDbi->addSelectDb('test_db');
         $this->assertTrue(
             $this->object->exportStructure(
                 'test_db',
@@ -455,6 +417,7 @@ class ExportTexytextTest extends AbstractTestCase
                 'test'
             )
         );
+        $this->assertAllSelectsConsumed();
         $result = ob_get_clean();
 
         $this->assertEquals(
@@ -470,6 +433,7 @@ class ExportTexytextTest extends AbstractTestCase
 
         // case 4
         ob_start();
+        $this->dummyDbi->addSelectDb('test_db');
         $this->assertTrue(
             $this->object->exportStructure(
                 'test_db',
@@ -480,6 +444,7 @@ class ExportTexytextTest extends AbstractTestCase
                 'test'
             )
         );
+        $this->assertAllSelectsConsumed();
         $result = ob_get_clean();
 
         $this->assertEquals(

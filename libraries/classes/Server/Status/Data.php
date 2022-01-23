@@ -13,8 +13,8 @@ use PhpMyAdmin\Url;
 
 use function __;
 use function basename;
-use function mb_strpos;
 use function mb_strtolower;
+use function str_contains;
 
 /**
  * This class provides data about the server status
@@ -73,10 +73,8 @@ class Data
      *
      * @param string $a key
      * @param mixed  $b value
-     *
-     * @return void
      */
-    public function __set($a, $b)
+    public function __set($a, $b): void
     {
         // Discard everything
     }
@@ -92,46 +90,46 @@ class Data
             // variable name => section
             // variable names match when they begin with the given string
 
-            'Com_'              => 'com',
-            'Innodb_'           => 'innodb',
-            'Ndb_'              => 'ndb',
-            'Handler_'          => 'handler',
-            'Qcache_'           => 'qcache',
-            'Threads_'          => 'threads',
+            'Com_' => 'com',
+            'Innodb_' => 'innodb',
+            'Ndb_' => 'ndb',
+            'Handler_' => 'handler',
+            'Qcache_' => 'qcache',
+            'Threads_' => 'threads',
             'Slow_launch_threads' => 'threads',
 
-            'Binlog_cache_'     => 'binlog_cache',
-            'Created_tmp_'      => 'created_tmp',
-            'Key_'              => 'key',
+            'Binlog_cache_' => 'binlog_cache',
+            'Created_tmp_' => 'created_tmp',
+            'Key_' => 'key',
 
-            'Delayed_'          => 'delayed',
+            'Delayed_' => 'delayed',
             'Not_flushed_delayed_rows' => 'delayed',
 
-            'Flush_commands'    => 'query',
-            'Last_query_cost'   => 'query',
-            'Slow_queries'      => 'query',
-            'Queries'           => 'query',
+            'Flush_commands' => 'query',
+            'Last_query_cost' => 'query',
+            'Slow_queries' => 'query',
+            'Queries' => 'query',
             'Prepared_stmt_count' => 'query',
 
-            'Select_'           => 'select',
-            'Sort_'             => 'sort',
+            'Select_' => 'select',
+            'Sort_' => 'sort',
 
-            'Open_tables'       => 'table',
-            'Opened_tables'     => 'table',
+            'Open_tables' => 'table',
+            'Opened_tables' => 'table',
             'Open_table_definitions' => 'table',
             'Opened_table_definitions' => 'table',
-            'Table_locks_'      => 'table',
+            'Table_locks_' => 'table',
 
-            'Rpl_status'        => 'repl',
-            'Slave_'            => 'repl',
+            'Rpl_status' => 'repl',
+            'Slave_' => 'repl',
 
-            'Tc_'               => 'tc',
+            'Tc_' => 'tc',
 
-            'Ssl_'              => 'ssl',
+            'Ssl_' => 'ssl',
 
-            'Open_files'        => 'files',
-            'Open_streams'      => 'files',
-            'Opened_files'      => 'files',
+            'Open_files' => 'files',
+            'Open_streams' => 'files',
+            'Opened_files' => 'files',
         ];
     }
 
@@ -144,25 +142,25 @@ class Data
     {
         return [
             // section => section name (description)
-            'com'           => 'Com',
-            'query'         => __('SQL query'),
-            'innodb'        => 'InnoDB',
-            'ndb'           => 'NDB',
-            'handler'       => __('Handler'),
-            'qcache'        => __('Query cache'),
-            'threads'       => __('Threads'),
-            'binlog_cache'  => __('Binary log'),
-            'created_tmp'   => __('Temporary data'),
-            'delayed'       => __('Delayed inserts'),
-            'key'           => __('Key cache'),
-            'select'        => __('Joins'),
-            'repl'          => __('Replication'),
-            'sort'          => __('Sorting'),
-            'table'         => __('Tables'),
-            'tc'            => __('Transaction coordinator'),
-            'files'         => __('Files'),
-            'ssl'           => 'SSL',
-            'other'         => __('Other'),
+            'com' => 'Com',
+            'query' => __('SQL query'),
+            'innodb' => 'InnoDB',
+            'ndb' => 'NDB',
+            'handler' => __('Handler'),
+            'qcache' => __('Query cache'),
+            'threads' => __('Threads'),
+            'binlog_cache' => __('Binary log'),
+            'created_tmp' => __('Temporary data'),
+            'delayed' => __('Delayed inserts'),
+            'key' => __('Key cache'),
+            'select' => __('Joins'),
+            'repl' => __('Replication'),
+            'sort' => __('Sorting'),
+            'table' => __('Tables'),
+            'tc' => __('Transaction coordinator'),
+            'files' => __('Files'),
+            'ssl' => 'SSL',
+            'other' => __('Other'),
         ];
     }
 
@@ -192,22 +190,22 @@ class Data
         ];
 
         if ($primaryInfo['status']) {
-            $links['repl'][__('Show slave hosts')] = [
+            $links['repl'][__('Show replica hosts')] = [
                 'url' => Url::getFromRoute('/sql'),
                 'params' => Url::getCommon([
                     'sql_query' => 'SHOW SLAVE HOSTS',
                     'goto' => $this->selfUrl,
                 ], ''),
             ];
-            $links['repl'][__('Show master status')] = [
-                'url' => '#replication_master',
+            $links['repl'][__('Show primary status')] = [
+                'url' => '#replication_primary',
                 'params' => '',
             ];
         }
 
         if ($replicaInfo['status']) {
-            $links['repl'][__('Show slave status')] = [
-                'url' => '#replication_slave',
+            $links['repl'][__('Show replica status')] = [
+                'url' => '#replication_replica',
                 'params' => '',
             ];
         }
@@ -323,7 +321,7 @@ class Data
         foreach ($server_status as $name => $value) {
             $section_found = false;
             foreach ($allocations as $filter => $section) {
-                if (mb_strpos($name, $filter) === false) {
+                if (! str_contains($name, $filter)) {
                     continue;
                 }
 
@@ -357,39 +355,29 @@ class Data
         global $dbi;
 
         $this->replicationInfo = new ReplicationInfo($dbi);
-        $this->replicationInfo->load($_POST['master_connection'] ?? null);
+        $this->replicationInfo->load($_POST['primary_connection'] ?? null);
 
         $this->selfUrl = basename($GLOBALS['PMA_PHP_SELF']);
 
         // get status from server
         $server_status_result = $dbi->tryQuery('SHOW GLOBAL STATUS');
-        $server_status = [];
         if ($server_status_result === false) {
+            $server_status = [];
             $this->dataLoaded = false;
         } else {
             $this->dataLoaded = true;
-            while ($arr = $dbi->fetchRow($server_status_result)) {
-                $server_status[$arr[0]] = $arr[1];
-            }
-
-            $dbi->freeResult($server_status_result);
+            $server_status = $server_status_result->fetchAllKeyPair();
+            unset($server_status_result);
         }
 
         // for some calculations we require also some server settings
-        $server_variables = $dbi->fetchResult(
-            'SHOW GLOBAL VARIABLES',
-            0,
-            1
-        );
+        $server_variables = $dbi->fetchResult('SHOW GLOBAL VARIABLES', 0, 1);
 
         // cleanup of some deprecated values
         $server_status = self::cleanDeprecated($server_status);
 
         // calculate some values
-        $server_status = $this->calculateValues(
-            $server_status,
-            $server_variables
-        );
+        $server_status = $this->calculateValues($server_status, $server_variables);
 
         // split variables in sections
         $allocations = $this->getAllocations();
@@ -414,13 +402,7 @@ class Data
             $allocationMap,
             $sectionUsed,
             $used_queries,
-        ] = $this->sortVariables(
-            $server_status,
-            $allocations,
-            $allocationMap,
-            $sectionUsed,
-            $used_queries
-        );
+        ] = $this->sortVariables($server_status, $allocations, $allocationMap, $sectionUsed, $used_queries);
 
         // admin commands are not queries (e.g. they include COM_PING,
         // which is excluded from $server_status['Questions'])
@@ -429,9 +411,7 @@ class Data
         // Set all class properties
         $this->dbIsLocal = false;
         // can be null if $cfg['ServerDefault'] = 0;
-        $serverHostToLower = mb_strtolower(
-            (string) $GLOBALS['cfg']['Server']['host']
-        );
+        $serverHostToLower = mb_strtolower((string) $GLOBALS['cfg']['Server']['host']);
         if (
             $serverHostToLower === 'localhost'
             || $GLOBALS['cfg']['Server']['host'] === '127.0.0.1'

@@ -7,9 +7,10 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin\Plugins;
 
+use PhpMyAdmin\ConfigStorage\Relation;
 use PhpMyAdmin\Export;
 use PhpMyAdmin\Properties\Plugins\ExportPluginProperties;
-use PhpMyAdmin\Relation;
+use PhpMyAdmin\Properties\Plugins\PluginPropertyItem;
 use PhpMyAdmin\Transformations;
 
 use function stripos;
@@ -20,11 +21,10 @@ use function stripos;
  * methods, but those are not declared here, because they are not implemented
  * by all export plugins.
  */
-abstract class ExportPlugin
+abstract class ExportPlugin implements Plugin
 {
     /**
-     * PhpMyAdmin\Properties\Plugins\ExportPluginProperties object containing
-     * the specific export plugin type properties
+     * Object containing the specific export plugin type properties.
      *
      * @var ExportPluginProperties
      */
@@ -39,47 +39,41 @@ abstract class ExportPlugin
     /** @var Transformations */
     protected $transformations;
 
-    public function __construct()
+    final public function __construct()
     {
         global $dbi;
 
         $this->relation = new Relation($dbi);
         $this->export = new Export($dbi);
         $this->transformations = new Transformations();
+        $this->init();
+        $this->properties = $this->setProperties();
     }
 
     /**
      * Outputs export header
-     *
-     * @return bool Whether it succeeded
      */
-    abstract public function exportHeader();
+    abstract public function exportHeader(): bool;
 
     /**
      * Outputs export footer
-     *
-     * @return bool Whether it succeeded
      */
-    abstract public function exportFooter();
+    abstract public function exportFooter(): bool;
 
     /**
      * Outputs database header
      *
      * @param string $db      Database name
      * @param string $dbAlias Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    abstract public function exportDBHeader($db, $dbAlias = '');
+    abstract public function exportDBHeader($db, $dbAlias = ''): bool;
 
     /**
      * Outputs database footer
      *
      * @param string $db Database name
-     *
-     * @return bool Whether it succeeded
      */
-    abstract public function exportDBFooter($db);
+    abstract public function exportDBFooter($db): bool;
 
     /**
      * Outputs CREATE DATABASE statement
@@ -87,10 +81,8 @@ abstract class ExportPlugin
      * @param string $db         Database name
      * @param string $exportType 'server', 'database', 'table'
      * @param string $dbAlias    Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    abstract public function exportDBCreate($db, $exportType, $dbAlias = '');
+    abstract public function exportDBCreate($db, $exportType, $dbAlias = ''): bool;
 
     /**
      * Outputs the content of a table
@@ -101,8 +93,6 @@ abstract class ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery SQL query for obtaining data
      * @param array  $aliases  Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     abstract public function exportData(
         $db,
@@ -111,7 +101,7 @@ abstract class ExportPlugin
         $errorUrl,
         $sqlQuery,
         array $aliases = []
-    );
+    ): bool;
 
     /**
      * The following methods are used in /export or in /database/operations,
@@ -123,10 +113,8 @@ abstract class ExportPlugin
      *
      * @param string $db      Database
      * @param array  $aliases Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportRoutines($db, array $aliases = [])
+    public function exportRoutines($db, array $aliases = []): bool
     {
         return true;
     }
@@ -135,10 +123,8 @@ abstract class ExportPlugin
      * Exports events
      *
      * @param string $db Database
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportEvents($db)
+    public function exportEvents($db): bool
     {
         return true;
     }
@@ -149,8 +135,6 @@ abstract class ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery the rawquery to output
      * @param string $crlf     the seperator for a file
-     *
-     * @return bool if succeeded
      */
     public function exportRawQuery(
         string $errorUrl,
@@ -179,8 +163,6 @@ abstract class ExportPlugin
      * @param bool   $mime       whether to include mime comments
      * @param bool   $dates      whether to include creation/update/check dates
      * @param array  $aliases    Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     public function exportStructure(
         $db,
@@ -194,7 +176,7 @@ abstract class ExportPlugin
         $mime = false,
         $dates = false,
         array $aliases = []
-    ) {
+    ): bool {
         return true;
     }
 
@@ -204,14 +186,12 @@ abstract class ExportPlugin
      * @param string       $db            database being exported
      * @param string|array $tables        table(s) being exported
      * @param array        $metadataTypes types of metadata to export
-     *
-     * @return bool Whether it succeeded
      */
     public function exportMetadata(
         $db,
         $tables,
         array $metadataTypes
-    ) {
+    ): bool {
         return true;
     }
 
@@ -244,33 +224,26 @@ abstract class ExportPlugin
     }
 
     /**
-     * Initialize the specific variables for each export plugin
-     *
-     * @return void
+     * Plugin specific initializations.
      */
-    protected function initSpecificVariables()
+    protected function init(): void
     {
     }
-
-    /* ~~~~~~~~~~~~~~~~~~~~ Getters and Setters ~~~~~~~~~~~~~~~~~~~~ */
 
     /**
      * Gets the export specific format plugin properties
      *
      * @return ExportPluginProperties
      */
-    public function getProperties()
+    public function getProperties(): PluginPropertyItem
     {
         return $this->properties;
     }
 
     /**
-     * Sets the export plugins properties and is implemented by each export
-     * plugin
-     *
-     * @return void
+     * Sets the export plugins properties and is implemented by each export plugin.
      */
-    abstract protected function setProperties();
+    abstract protected function setProperties(): ExportPluginProperties;
 
     /**
      * The following methods are implemented here so that they
@@ -285,10 +258,8 @@ abstract class ExportPlugin
      * @param array  $aliases Alias information for db/table/column
      * @param string $db      the database
      * @param string $table   the table
-     *
-     * @return void
      */
-    public function initAlias($aliases, &$db, &$table = null)
+    public function initAlias($aliases, &$db, &$table = null): void
     {
         if (! empty($aliases[$db]['tables'][$table]['alias'])) {
             $table = $aliases[$db]['tables'][$table]['alias'];
@@ -324,11 +295,7 @@ abstract class ExportPlugin
         // search each database
         foreach ($aliases as $db_key => $db) {
             // check if id is database and has alias
-            if (
-                stripos($type, 'db') !== false
-                && $db_key === $id
-                && ! empty($db['alias'])
-            ) {
+            if (stripos($type, 'db') !== false && $db_key === $id && ! empty($db['alias'])) {
                 return $db['alias'];
             }
 
@@ -345,11 +312,7 @@ abstract class ExportPlugin
             // search each of its tables
             foreach ($db['tables'] as $table_key => $table) {
                 // check if id is table and has alias
-                if (
-                    stripos($type, 'tbl') !== false
-                    && $table_key === $id
-                    && ! empty($table['alias'])
-                ) {
+                if (stripos($type, 'tbl') !== false && $table_key === $id && ! empty($table['alias'])) {
                     return $table['alias'];
                 }
 
@@ -360,11 +323,7 @@ abstract class ExportPlugin
                 // search each of its columns
                 foreach ($table['columns'] as $col_key => $col) {
                     // check if id is column
-                    if (
-                        stripos($type, 'col') !== false
-                        && $col_key === $id
-                        && ! empty($col)
-                    ) {
+                    if (stripos($type, 'col') !== false && $col_key === $id && ! empty($col)) {
                         return $col;
                     }
                 }
@@ -410,5 +369,10 @@ abstract class ExportPlugin
         }
 
         return $relation;
+    }
+
+    public function isAvailable(): bool
+    {
+        return true;
     }
 }

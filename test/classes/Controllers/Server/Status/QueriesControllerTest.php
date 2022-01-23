@@ -8,7 +8,7 @@ use PhpMyAdmin\Controllers\Server\Status\QueriesController;
 use PhpMyAdmin\Server\Status\Data;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Tests\AbstractTestCase;
-use PhpMyAdmin\Tests\Stubs\Response;
+use PhpMyAdmin\Tests\Stubs\ResponseRenderer;
 use PhpMyAdmin\Util;
 
 use function __;
@@ -28,7 +28,6 @@ class QueriesControllerTest extends AbstractTestCase
         parent::setUp();
         $GLOBALS['text_dir'] = 'ltr';
         parent::setGlobalConfig();
-        $GLOBALS['config']->enableBc();
         parent::setTheme();
 
         $GLOBALS['server'] = 1;
@@ -54,11 +53,13 @@ class QueriesControllerTest extends AbstractTestCase
     {
         global $dbi;
 
-        $response = new Response();
+        $response = new ResponseRenderer();
 
         $controller = new QueriesController($response, new Template(), $this->data, $dbi);
 
-        $controller->index();
+        $this->dummyDbi->addSelectDb('mysql');
+        $controller();
+        $this->assertAllSelectsConsumed();
         $html = $response->getHTMLResult();
 
         $hourFactor = 3600 / $this->data->status['Uptime'];
@@ -68,14 +69,8 @@ class QueriesControllerTest extends AbstractTestCase
         $questionsFromStart = __('Questions since startup:')
             . '    ' . Util::formatNumber($totalQueries, 0);
 
-        $this->assertStringContainsString(
-            '<h3 id="serverstatusqueries">',
-            $html
-        );
-        $this->assertStringContainsString(
-            $questionsFromStart,
-            $html
-        );
+        $this->assertStringContainsString('<h3 id="serverstatusqueries">', $html);
+        $this->assertStringContainsString($questionsFromStart, $html);
 
         $this->assertStringContainsString(
             __('per hour:'),
@@ -86,10 +81,7 @@ class QueriesControllerTest extends AbstractTestCase
             $html
         );
 
-        $valuePerMinute = Util::formatNumber(
-            $totalQueries * 60 / $this->data->status['Uptime'],
-            0
-        );
+        $valuePerMinute = Util::formatNumber($totalQueries * 60 / $this->data->status['Uptime'], 0);
         $this->assertStringContainsString(
             __('per minute:'),
             $html
@@ -108,10 +100,7 @@ class QueriesControllerTest extends AbstractTestCase
             htmlspecialchars('change db'),
             $html
         );
-        $this->assertStringContainsString(
-            '54',
-            $html
-        );
+        $this->assertStringContainsString('54', $html);
         $this->assertStringContainsString(
             htmlspecialchars('select'),
             $html

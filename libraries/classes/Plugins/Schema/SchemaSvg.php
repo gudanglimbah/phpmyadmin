@@ -21,17 +21,18 @@ use function __;
  */
 class SchemaSvg extends SchemaPlugin
 {
-    public function __construct()
+    /**
+     * @psalm-return non-empty-lowercase-string
+     */
+    public function getName(): string
     {
-        $this->setProperties();
+        return 'svg';
     }
 
     /**
      * Sets the schema export SVG properties
-     *
-     * @return void
      */
-    protected function setProperties()
+    protected function setProperties(): SchemaPluginProperties
     {
         $schemaPluginProperties = new SchemaPluginProperties();
         $schemaPluginProperties->setText('SVG');
@@ -41,9 +42,7 @@ class SchemaSvg extends SchemaPlugin
         // create the root group that will be the options field for
         // $schemaPluginProperties
         // this will be shown as "Format specific options"
-        $exportSpecificOptions = new OptionsPropertyRootGroup(
-            'Format Specific Options'
-        );
+        $exportSpecificOptions = new OptionsPropertyRootGroup('Format Specific Options');
 
         // specific options main group
         $specificOptions = new OptionsPropertyMainGroup('general_opts');
@@ -62,17 +61,16 @@ class SchemaSvg extends SchemaPlugin
 
         // set the options for the schema export plugin property item
         $schemaPluginProperties->setOptions($exportSpecificOptions);
-        $this->properties = $schemaPluginProperties;
+
+        return $schemaPluginProperties;
     }
 
     /**
      * Exports the schema into SVG format.
      *
      * @param string $db database name
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportSchema($db)
+    public function exportSchema($db): bool
     {
         $export = new SvgRelationSchema($db);
         $export->showOutput();

@@ -5,10 +5,9 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Tests\Gis;
 
 use PhpMyAdmin\Gis\GisMultiPolygon;
+use PhpMyAdmin\Image\ImageWrapper;
 use TCPDF;
 
-use function function_exists;
-use function imagecreatetruecolor;
 use function preg_match;
 
 /**
@@ -16,17 +15,12 @@ use function preg_match;
  */
 class GisMultiPolygonTest extends GisGeomTestCase
 {
-    /**
-     * @var    GisMultiPolygon
-     * @access protected
-     */
+    /** @var    GisMultiPolygon */
     protected $object;
 
     /**
      * Sets up the fixture, for example, opens a network connection.
      * This method is called before a test is executed.
-     *
-     * @access protected
      */
     protected function setUp(): void
     {
@@ -37,8 +31,6 @@ class GisMultiPolygonTest extends GisGeomTestCase
     /**
      * Tears down the fixture, for example, closes a network connection.
      * This method is called after a test is executed.
-     *
-     * @access protected
      */
     protected function tearDown(): void
     {
@@ -160,8 +152,7 @@ class GisMultiPolygonTest extends GisGeomTestCase
                 $temp1,
                 0,
                 null,
-                'MULTIPOLYGON(((35 10,10 20,15 40,45 45,35 10)'
-                    . ',(20 30,35 32,30 20,20 30)))',
+                'MULTIPOLYGON(((35 10,10 20,15 40,45 45,35 10),(20 30,35 32,30 20,20 30)))',
             ],
             // a polygon should have at least one ring
             [
@@ -318,8 +309,7 @@ class GisMultiPolygonTest extends GisGeomTestCase
     {
         return [
             [
-                'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),'
-                    . '((105 0,56 20,78 73,105 0)))',
+                'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),((105 0,56 20,78 73,105 0)))',
                 [
                     'minX' => 16,
                     'maxX' => 147,
@@ -340,23 +330,22 @@ class GisMultiPolygonTest extends GisGeomTestCase
         ];
     }
 
+    /**
+     * @requires extension gd
+     */
     public function testPrepareRowAsPng(): void
     {
-        if (! function_exists('imagecreatetruecolor')) {
-            $this->markTestSkipped('GD extension missing!');
-        }
-
-        $image = imagecreatetruecolor(120, 150);
-        $this->assertNotFalse($image);
+        $image = ImageWrapper::create(120, 150);
+        $this->assertNotNull($image);
         $return = $this->object->prepareRowAsPng(
-            'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),'
-            . '((105 0,56 20,78 73,105 0)))',
+            'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),((105 0,56 20,78 73,105 0)))',
             'image',
             '#B02EE0',
             ['x' => 12, 'y' => 69, 'scale' => 2, 'height' => 150],
             $image
         );
-        $this->assertImage($return);
+        $this->assertEquals(120, $return->width());
+        $this->assertEquals(150, $return->height());
     }
 
     /**
@@ -377,14 +366,8 @@ class GisMultiPolygonTest extends GisGeomTestCase
         array $scale_data,
         TCPDF $pdf
     ): void {
-        $return = $this->object->prepareRowAsPdf(
-            $spatial,
-            $label,
-            $fill_color,
-            $scale_data,
-            $pdf
-        );
-        $this->assertInstanceOf('TCPDF', $return);
+        $return = $this->object->prepareRowAsPdf($spatial, $label, $fill_color, $scale_data, $pdf);
+        $this->assertInstanceOf(TCPDF::class, $return);
     }
 
     /**
@@ -396,8 +379,7 @@ class GisMultiPolygonTest extends GisGeomTestCase
     {
         return [
             [
-                'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),'
-                    . '((105 0,56 20,78 73,105 0)))',
+                'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),((105 0,56 20,78 73,105 0)))',
                 'pdf',
                 '#B02EE0',
                 [
@@ -429,12 +411,7 @@ class GisMultiPolygonTest extends GisGeomTestCase
         array $scaleData,
         string $output
     ): void {
-        $string = $this->object->prepareRowAsSvg(
-            $spatial,
-            $label,
-            $fillColor,
-            $scaleData
-        );
+        $string = $this->object->prepareRowAsSvg($spatial, $label, $fillColor, $scaleData);
         $this->assertEquals(1, preg_match($output, $string));
     }
 
@@ -447,8 +424,7 @@ class GisMultiPolygonTest extends GisGeomTestCase
     {
         return [
             [
-                'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),'
-                    . '((105 0,56 20,78 73,105 0)))',
+                'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),((105 0,56 20,78 73,105 0)))',
                 'svg',
                 '#B02EE0',
                 [
@@ -509,8 +485,7 @@ class GisMultiPolygonTest extends GisGeomTestCase
     {
         return [
             [
-                'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),'
-                    . '((105 0,56 20,78 73,105 0)))',
+                'MULTIPOLYGON(((136 40,147 83,16 75,136 40)),((105 0,56 20,78 73,105 0)))',
                 4326,
                 'Ol',
                 [176, 46, 224],

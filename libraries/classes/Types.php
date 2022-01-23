@@ -11,7 +11,6 @@ use function __;
 use function _pgettext;
 use function array_diff;
 use function array_merge;
-use function array_push;
 use function htmlspecialchars;
 use function in_array;
 use function mb_strtoupper;
@@ -54,10 +53,8 @@ class Types
      * Check whether operator is unary.
      *
      * @param string $op operator name
-     *
-     * @return bool
      */
-    public function isUnaryOperator($op)
+    public function isUnaryOperator($op): bool
     {
         return in_array($op, $this->getUnaryOperators());
     }
@@ -207,21 +204,14 @@ class Types
         $type = mb_strtoupper($type);
         switch ($type) {
             case 'TINYINT':
-                return __(
-                    'A 1-byte integer, signed range is -128 to 127, unsigned range is ' .
-                    '0 to 255'
-                );
+                return __('A 1-byte integer, signed range is -128 to 127, unsigned range is 0 to 255');
 
             case 'SMALLINT':
-                return __(
-                    'A 2-byte integer, signed range is -32,768 to 32,767, unsigned ' .
-                    'range is 0 to 65,535'
-                );
+                return __('A 2-byte integer, signed range is -32,768 to 32,767, unsigned range is 0 to 65,535');
 
             case 'MEDIUMINT':
                 return __(
-                    'A 3-byte integer, signed range is -8,388,608 to 8,388,607, ' .
-                    'unsigned range is 0 to 16,777,215'
+                    'A 3-byte integer, signed range is -8,388,608 to 8,388,607, unsigned range is 0 to 16,777,215'
                 );
 
             case 'INT':
@@ -260,21 +250,14 @@ class Types
                 );
 
             case 'REAL':
-                return __(
-                    'Synonym for DOUBLE (exception: in REAL_AS_FLOAT SQL mode it is ' .
-                    'a synonym for FLOAT)'
-                );
+                return __('Synonym for DOUBLE (exception: in REAL_AS_FLOAT SQL mode it is a synonym for FLOAT)');
 
             case 'BIT':
-                return __(
-                    'A bit-field type (M), storing M of bits per value (default is 1, ' .
-                    'maximum is 64)'
-                );
+                return __('A bit-field type (M), storing M of bits per value (default is 1, maximum is 64)');
 
             case 'BOOLEAN':
                 return __(
-                    'A synonym for TINYINT(1), a value of zero is considered false, ' .
-                    'nonzero values are considered true'
+                    'A synonym for TINYINT(1), a value of zero is considered false, nonzero values are considered true'
                 );
 
             case 'SERIAL':
@@ -324,8 +307,7 @@ class Types
             case 'VARCHAR':
                 return sprintf(
                     __(
-                        'A variable-length (%s) string, the effective maximum length ' .
-                        'is subject to the maximum row size'
+                        'A variable-length (%s) string, the effective maximum length is subject to the maximum row size'
                     ),
                     '0-65,535'
                 );
@@ -360,8 +342,7 @@ class Types
 
             case 'BINARY':
                 return __(
-                    'Similar to the CHAR type, but stores binary byte strings rather ' .
-                    'than non-binary character strings'
+                    'Similar to the CHAR type, but stores binary byte strings rather than non-binary character strings'
                 );
 
             case 'VARBINARY':
@@ -398,8 +379,7 @@ class Types
 
             case 'ENUM':
                 return __(
-                    'An enumeration, chosen from the list of up to 65,535 values or ' .
-                    "the special '' error value"
+                    'An enumeration, chosen from the list of up to 65,535 values or the special \'\' error value'
                 );
 
             case 'SET':
@@ -421,9 +401,7 @@ class Types
                 return __('A collection of points');
 
             case 'MULTILINESTRING':
-                return __(
-                    'A collection of curves with linear interpolation between points'
-                );
+                return __('A collection of curves with linear interpolation between points');
 
             case 'MULTIPOLYGON':
                 return __('A collection of polygons');
@@ -432,10 +410,7 @@ class Types
                 return __('A collection of geometry objects of any type');
 
             case 'JSON':
-                return __(
-                    'Stores and enables efficient access to data in JSON'
-                    . ' (JavaScript Object Notation) documents'
-                );
+                return __('Stores and enables efficient access to data in JSON (JavaScript Object Notation) documents');
 
             case 'INET6':
                 return __('Intended for storage of IPv6 addresses, as well as IPv4 '
@@ -564,10 +539,7 @@ class Types
                     'VERSION',
                 ];
 
-                if (
-                    ($isMariaDB && $serverVersion < 100012)
-                    || $serverVersion < 50603
-                ) {
+                if (($isMariaDB && $serverVersion < 100012) || $serverVersion < 50603) {
                     $ret = array_diff($ret, ['INET6_NTOA']);
                 }
 
@@ -647,10 +619,7 @@ class Types
                     'WEEKOFYEAR',
                     'YEARWEEK',
                 ];
-                if (
-                    ($isMariaDB && $serverVersion < 100012)
-                    || $serverVersion < 50603
-                ) {
+                if (($isMariaDB && $serverVersion < 100012) || $serverVersion < 50603) {
                     $ret = array_diff($ret, ['INET6_ATON']);
                 }
 
@@ -730,7 +699,7 @@ class Types
             $this->getFunctionsClass('CHAR'),
             $this->getFunctionsClass('NUMBER'),
             $this->getFunctionsClass('DATE'),
-            $this->getFunctionsClass('UUID')
+            $this->getFunctionsClass('SPATIAL')
         );
         sort($ret);
 
@@ -801,7 +770,7 @@ class Types
         ];
 
         // Text
-        $ret[_pgettext('string types', 'String')] = [
+        $stringTypes = [
             'CHAR',
             'VARCHAR',
             '-',
@@ -821,6 +790,12 @@ class Types
             'ENUM',
             'SET',
         ];
+        if ($isMariaDB && $serverVersion >= 100500) {
+            $stringTypes[] = '-';
+            $stringTypes[] = 'INET6';
+        }
+
+        $ret[_pgettext('string types', 'String')] = $stringTypes;
 
         $ret[_pgettext('spatial types', 'Spatial')] = [
             'GEOMETRY',
@@ -833,15 +808,8 @@ class Types
             'GEOMETRYCOLLECTION',
         ];
 
-        if (
-            ($isMariaDB && $serverVersion > 100207)
-            || (! $isMariaDB && $serverVersion >= 50708)
-        ) {
+        if (($isMariaDB && $serverVersion > 100207) || (! $isMariaDB && $serverVersion >= 50708)) {
             $ret['JSON'] = ['JSON'];
-        }
-
-        if ($isMariaDB && $serverVersion >= 100500) {
-            array_push($ret[_pgettext('string types', 'String')], '-', 'INET6');
         }
 
         return $ret;
@@ -873,13 +841,13 @@ class Types
      */
     public function getIntegerRange($type, $signed = true)
     {
-        static $min_max_data = [
+        $min_max_data = [
             'unsigned' => [
-                'tinyint'   => [
+                'tinyint' => [
                     '0',
                     '255',
                 ],
-                'smallint'  => [
+                'smallint' => [
                     '0',
                     '65535',
                 ],
@@ -887,21 +855,21 @@ class Types
                     '0',
                     '16777215',
                 ],
-                'int'       => [
+                'int' => [
                     '0',
                     '4294967295',
                 ],
-                'bigint'    => [
+                'bigint' => [
                     '0',
                     '18446744073709551615',
                 ],
             ],
             'signed' => [
-                'tinyint'   => [
+                'tinyint' => [
                     '-128',
                     '127',
                 ],
-                'smallint'  => [
+                'smallint' => [
                     '-32768',
                     '32767',
                 ],
@@ -909,11 +877,11 @@ class Types
                     '-8388608',
                     '8388607',
                 ],
-                'int'       => [
+                'int' => [
                     '-2147483648',
                     '2147483647',
                 ],
-                'bigint'    => [
+                'bigint' => [
                     '-9223372036854775808',
                     '9223372036854775807',
                 ],

@@ -14,7 +14,7 @@ use PhpMyAdmin\Util;
 use function count;
 use function implode;
 use function is_array;
-use function strpos;
+use function str_contains;
 
 /**
  * Displays the MySQL servers choice form
@@ -41,10 +41,7 @@ class Select
 
         $form_action = '';
         if ($not_only_options) {
-            $form_action = Util::getScriptNameForOption(
-                $GLOBALS['cfg']['DefaultTabServer'],
-                'server'
-            );
+            $form_action = Util::getScriptNameForOption($GLOBALS['cfg']['DefaultTabServer'], 'server');
         }
 
         $servers = [];
@@ -88,13 +85,10 @@ class Select
                         'label' => $label,
                     ];
                 } else {
-                    $scriptName = Util::getScriptNameForOption(
-                        $GLOBALS['cfg']['DefaultTabServer'],
-                        'server'
-                    );
+                    $scriptName = Util::getScriptNameForOption($GLOBALS['cfg']['DefaultTabServer'], 'server');
                     $href = $scriptName . Url::getCommon(
                         ['server' => $key],
-                        strpos($scriptName, '?') === false ? '?' : '&'
+                        ! str_contains($scriptName, '?') ? '?' : '&'
                     );
                     $servers['list'][] = [
                         'href' => $href,

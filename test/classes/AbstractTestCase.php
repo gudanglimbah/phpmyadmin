@@ -4,20 +4,24 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin\Tests;
 
+use PhpMyAdmin\Cache;
 use PhpMyAdmin\Config;
 use PhpMyAdmin\Core;
 use PhpMyAdmin\DatabaseInterface;
-use PhpMyAdmin\Language;
 use PhpMyAdmin\LanguageManager;
 use PhpMyAdmin\SqlParser\Translator;
 use PhpMyAdmin\Tests\Stubs\DbiDummy;
-use PhpMyAdmin\Tests\Stubs\Response;
+use PhpMyAdmin\Tests\Stubs\ResponseRenderer;
 use PhpMyAdmin\Theme;
+use PhpMyAdmin\ThemeManager;
 use PhpMyAdmin\Utils\HttpRequest;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 
+use function array_keys;
 use function in_array;
+
+use const DIRECTORY_SEPARATOR;
 
 /**
  * Abstract class to hold some usefull methods used in tests
@@ -59,7 +63,7 @@ abstract class AbstractTestCase extends TestCase
      */
     protected function setUp(): void
     {
-        foreach ($GLOBALS as $key => $val) {
+        foreach (array_keys($GLOBALS) as $key) {
             if (in_array($key, $this->globalsAllowList)) {
                 continue;
             }
@@ -83,27 +87,36 @@ abstract class AbstractTestCase extends TestCase
         $_REQUEST = [];
         // Config before DBI
         $this->setGlobalConfig();
-        $GLOBALS['cfg']['environment'] = 'development';
-        $GLOBALS['containerBuilder'] = Core::getContainerBuilder();
+        $this->loadContainerBuilder();
         $this->setGlobalDbi();
-    }
-
-    protected function loadDefaultConfig(): void
-    {
-        global $cfg;
-
-        require ROOT_PATH . 'libraries/config.default.php';
+        Cache::purge();
     }
 
     protected function assertAllQueriesConsumed(): void
     {
-        if ($this->dummyDbi->hasUnUsedQueries() === false) {
+        $unUsedQueries = $this->dummyDbi->getUnUsedQueries();
+        $this->assertSame([], $unUsedQueries, 'Some queries where not used !');
+    }
+
+    protected function assertAllSelectsConsumed(): void
+    {
+        $unUsedSelects = $this->dummyDbi->getUnUsedDatabaseSelects();
+        $this->assertSame(
+            [],
+            $unUsedSelects,
+            'Some database selects where not used !'
+        );
+    }
+
+    protected function assertAllErrorCodesConsumed(): void
+    {
+        if ($this->dummyDbi->hasUnUsedErrors() === false) {
             $this->assertTrue(true);// increment the assertion count
 
             return;
         }
 
-        $this->fail('Some queries where no used !');
+        $this->fail('Some error codes where not used !');
     }
 
     protected function loadContainerBuilder(): void
@@ -125,17 +138,27 @@ abstract class AbstractTestCase extends TestCase
     {
         global $containerBuilder;
 
-        $response = new Response();
-        $containerBuilder->set(Response::class, $response);
-        $containerBuilder->setAlias('response', Response::class);
+        $response = new ResponseRenderer();
+        $containerBuilder->set(ResponseRenderer::class, $response);
+        $containerBuilder->setAlias('response', ResponseRenderer::class);
+    }
+
+    protected function setResponseIsAjax(): void
+    {
+        global $containerBuilder;
+
+        /** @var ResponseRenderer $response */
+        $response = $containerBuilder->get(ResponseRenderer::class);
+
+        $response->setAjax(true);
     }
 
     protected function getResponseHtmlResult(): string
     {
         global $containerBuilder;
 
-        /** @var Response $response */
-        $response = $containerBuilder->get(Response::class);
+        /** @var ResponseRenderer $response */
+        $response = $containerBuilder->get(ResponseRenderer::class);
 
         return $response->getHTMLResult();
     }
@@ -144,10 +167,28 @@ abstract class AbstractTestCase extends TestCase
     {
         global $containerBuilder;
 
-        /** @var Response $response */
-        $response = $containerBuilder->get(Response::class);
+        /** @var ResponseRenderer $response */
+        $response = $containerBuilder->get(ResponseRenderer::class);
 
         return $response->getJSONResult();
+    }
+
+    protected function assertResponseWasNotSuccessfull(): void
+    {
+        global $containerBuilder;
+        /** @var ResponseRenderer $response */
+        $response = $containerBuilder->get(ResponseRenderer::class);
+
+        $this->assertFalse($response->hasSuccessState(), 'expected the request to fail');
+    }
+
+    protected function assertResponseWasSuccessfull(): void
+    {
+        global $containerBuilder;
+        /** @var ResponseRenderer $response */
+        $response = $containerBuilder->get(ResponseRenderer::class);
+
+        $this->assertTrue($response->hasSuccessState(), 'expected the request not to fail');
     }
 
     protected function setGlobalDbi(): void
@@ -160,15 +201,21 @@ abstract class AbstractTestCase extends TestCase
 
     protected function setGlobalConfig(): void
     {
-        global $config;
+        global $config, $cfg;
         $config = new Config();
+        $config->checkServers();
         $config->set('environment', 'development');
+        $cfg = $config->settings;
     }
 
     protected function setTheme(): void
     {
         global $theme;
-        $theme = Theme::load('pmahomme');
+        $theme = Theme::load(
+            ThemeManager::getThemesDir() . 'pmahomme',
+            ThemeManager::getThemesFsDir() . 'pmahomme' . DIRECTORY_SEPARATOR,
+            'pmahomme'
+        );
     }
 
     protected function setLanguage(string $code = 'en'): void
@@ -177,8 +224,11 @@ abstract class AbstractTestCase extends TestCase
 
         $lang = $code;
         /* Ensure default language is active */
-        /** @var Language $languageEn */
         $languageEn = LanguageManager::getInstance()->getLanguage($code);
+        if ($languageEn === false) {
+            return;
+        }
+
         $languageEn->activate();
         Translator::load();
     }
@@ -189,12 +239,12 @@ abstract class AbstractTestCase extends TestCase
     }
 
     /**
-     * Desctroys the environment built for the test.
+     * Destroys the environment built for the test.
      * Clean all variables
      */
     protected function tearDown(): void
     {
-        foreach ($GLOBALS as $key => $val) {
+        foreach (array_keys($GLOBALS) as $key) {
             if (in_array($key, $this->globalsAllowList)) {
                 continue;
             }

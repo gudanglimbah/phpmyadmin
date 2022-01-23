@@ -23,8 +23,6 @@ class Font
      * Get list with characters and the corresponding width modifiers.
      *
      * @return array with characters and corresponding width modifier
-     *
-     * @access public
      */
     public function getCharLists(): array
     {
@@ -184,8 +182,6 @@ class Font
      * @param array|null $charLists list of characters and their width modifiers
      *
      * @return int width of the text
-     *
-     * @access public
      */
     public function getStringWidth(
         string $text,
@@ -211,7 +207,7 @@ class Font
                 ) * $charList['modifier'];
         }
 
-        $text  = str_replace(' ', '', $text);//remove the " "'s
+        $text = str_replace(' ', '', $text);//remove the " "'s
         //all other chars
         $count += mb_strlen((string) preg_replace('/[a-z0-9]/i', '', $text)) * 0.3;
 

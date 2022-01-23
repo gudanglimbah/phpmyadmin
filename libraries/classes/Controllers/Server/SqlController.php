@@ -7,7 +7,7 @@ namespace PhpMyAdmin\Controllers\Server;
 use PhpMyAdmin\Config\PageSettings;
 use PhpMyAdmin\Controllers\AbstractController;
 use PhpMyAdmin\DatabaseInterface;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\SqlQueryForm;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
@@ -23,18 +23,18 @@ class SqlController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, SqlQueryForm $sqlQueryForm, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        SqlQueryForm $sqlQueryForm,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template);
         $this->sqlQueryForm = $sqlQueryForm;
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $errorUrl;
 

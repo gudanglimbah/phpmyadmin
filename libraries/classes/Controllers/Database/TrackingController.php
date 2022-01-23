@@ -8,7 +8,7 @@ use PhpMyAdmin\CheckUserPrivileges;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Message;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Tracker;
 use PhpMyAdmin\Tracking;
@@ -31,19 +31,19 @@ class TrackingController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param string            $db       Database name.
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, $db, Tracking $tracking, $dbi)
-    {
+    public function __construct(
+        ResponseRenderer $response,
+        Template $template,
+        string $db,
+        Tracking $tracking,
+        DatabaseInterface $dbi
+    ) {
         parent::__construct($response, $template, $db);
         $this->tracking = $tracking;
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $db, $text_dir, $urlParams, $tables, $num_tables;
         global $total_num_tables, $sub_part, $pos, $data, $cfg;
@@ -75,7 +75,7 @@ class TrackingController extends AbstractController
             $tooltip_truename,
             $tooltip_aliasname,
             $pos,
-        ] = Util::getDbInfo($db, $sub_part ?? '');
+        ] = Util::getDbInfo($db, $sub_part);
 
         if (isset($_POST['delete_tracking'], $_POST['table'])) {
             Tracker::deleteTracking($db, $_POST['table']);
@@ -87,8 +87,7 @@ class TrackingController extends AbstractController
             echo Message::success(
                 sprintf(
                     __(
-                        'Version %1$s was created for selected tables,'
-                        . ' tracking is active for them.'
+                        'Version %1$s was created for selected tables, tracking is active for them.'
                     ),
                     htmlspecialchars($_POST['version'])
                 )
@@ -140,11 +139,7 @@ class TrackingController extends AbstractController
             return;
         }
 
-        echo $this->tracking->getHtmlForDbTrackingTables(
-            $db,
-            $urlParams,
-            $text_dir
-        );
+        echo $this->tracking->getHtmlForDbTrackingTables($db, $urlParams, $text_dir);
 
         // If available print out database log
         if (count($data['ddlog']) <= 0) {

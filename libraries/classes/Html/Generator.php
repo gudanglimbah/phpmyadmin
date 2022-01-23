@@ -11,11 +11,13 @@ use PhpMyAdmin\Core;
 use PhpMyAdmin\Message;
 use PhpMyAdmin\Profiling;
 use PhpMyAdmin\Providers\ServerVariables\ServerVariablesProvider;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\Query\Compatibility;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Sanitize;
 use PhpMyAdmin\SqlParser\Lexer;
 use PhpMyAdmin\SqlParser\Parser;
 use PhpMyAdmin\SqlParser\Utils\Error as ParserError;
+use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
 use Throwable;
@@ -30,7 +32,6 @@ use function array_key_exists;
 use function ceil;
 use function count;
 use function explode;
-use function floor;
 use function htmlentities;
 use function htmlspecialchars;
 use function implode;
@@ -46,10 +47,12 @@ use function nl2br;
 use function preg_match;
 use function preg_replace;
 use function sprintf;
+use function str_contains;
 use function str_replace;
+use function str_starts_with;
 use function strlen;
-use function strncmp;
-use function strpos;
+use function strtoupper;
+use function substr;
 use function trim;
 use function urlencode;
 
@@ -66,8 +69,6 @@ class Generator
      * @param string $text Text to copy to clipboard
      *
      * @return string  the html link
-     *
-     * @access public
      */
     public static function showCopyToClipboard(string $text): string
     {
@@ -93,20 +94,13 @@ class Generator
         $link = $useMariaDB ? $kbs->getDocLinkByNameMariaDb($name) :
                             $kbs->getDocLinkByNameMysql($name);
 
-        return MySQLDocumentation::show(
-            $name,
-            false,
-            $link,
-            $text
-        );
+        return MySQLDocumentation::show($name, false, $link, $text);
     }
 
     /**
      * Returns HTML code for a tooltip
      *
      * @param string $message the message for the tooltip
-     *
-     * @access public
      */
     public static function showHint(string $message): string
     {
@@ -141,14 +135,11 @@ class Generator
             $database = Util::unescapeMysqlWildcards($database);
         }
 
-        $scriptName = Util::getScriptNameForOption(
-            $GLOBALS['cfg']['DefaultTabDatabase'],
-            'database'
-        );
+        $scriptName = Util::getScriptNameForOption($GLOBALS['cfg']['DefaultTabDatabase'], 'database');
 
         return '<a href="'
             . $scriptName
-            . Url::getCommon(['db' => $database], strpos($scriptName, '?') === false ? '?' : '&')
+            . Url::getCommon(['db' => $database], ! str_contains($scriptName, '?') ? '?' : '&')
             . '" title="'
             . htmlspecialchars(
                 sprintf(
@@ -216,10 +207,7 @@ class Generator
             $includeIcon = true;
         }
 
-        if (
-            $forceText
-            || Util::showText($controlParam)
-        ) {
+        if ($forceText || Util::showText($controlParam)) {
             $includeText = true;
         }
 
@@ -294,6 +282,15 @@ class Generator
         $currentClass = $dbi->types->getTypeClass($field['True_Type']);
         if (! empty($currentClass) && isset($cfg['DefaultFunctions']['FUNC_' . $currentClass])) {
             $defaultFunction = $cfg['DefaultFunctions']['FUNC_' . $currentClass];
+            // Change the configured default function to include the ST_ prefix with MySQL 5.6 and later.
+            // It needs to match the function listed in the select html element.
+            if (
+                $currentClass === 'SPATIAL' &&
+                $dbi->getVersion() >= 50600 &&
+                strtoupper(substr($defaultFunction, 0, 3)) !== 'ST_'
+            ) {
+                $defaultFunction = 'ST_' . $defaultFunction;
+            }
         }
 
         // what function defined as default?
@@ -341,7 +338,6 @@ class Generator
         global $dbi;
 
         $defaultFunction = self::getDefaultFunctionForField($field, $insertMode);
-        $dropdownBuilt = [];
 
         // Create the output
         $retval = '<option></option>' . "\n";
@@ -350,15 +346,11 @@ class Generator
         $functions = $dbi->types->getAllFunctions();
         foreach ($functions as $function) {
             $retval .= '<option';
-            if (
-                isset($foreignData['foreign_link']) && $foreignData['foreign_link'] !== false
-                && $defaultFunction === $function
-            ) {
+            if ($function === $defaultFunction && ! isset($foreignData['foreign_field'])) {
                 $retval .= ' selected="selected"';
             }
 
             $retval .= '>' . $function . '</option>' . "\n";
-            $dropdownBuilt[$function] = true;
         }
 
         $retval .= '<option value="PHP_PASSWORD_HASH" title="';
@@ -414,10 +406,7 @@ class Generator
 
         $retval .= ' title="' . $text . '">';
         if ($showIcon) {
-            $retval .= self::getImage(
-                $icon,
-                $text
-            );
+            $retval .= self::getImage($icon, $text);
         }
 
         if ($showText) {
@@ -440,10 +429,7 @@ class Generator
     {
         if (isset($_REQUEST['session_max_rows'])) {
             $rows = (int) $_REQUEST['session_max_rows'];
-        } elseif (
-            isset($_SESSION['tmpval']['max_rows'])
-            && $_SESSION['tmpval']['max_rows'] !== 'all'
-        ) {
+        } elseif (isset($_SESSION['tmpval']['max_rows']) && $_SESSION['tmpval']['max_rows'] !== 'all') {
             $rows = (int) $_SESSION['tmpval']['max_rows'];
         } else {
             $rows = (int) $GLOBALS['cfg']['MaxRows'];
@@ -477,33 +463,31 @@ class Generator
 
         $ret = '';
         $result = $dbi->query($sqlQuery);
-        if ($result) {
-            $devider = '+';
-            $columnNames = '|';
-            $fieldsMeta = $dbi->getFieldsMeta($result);
-            foreach ($fieldsMeta as $meta) {
-                $devider .= '---+';
-                $columnNames .= ' ' . $meta->name . ' |';
-            }
+        $devider = '+';
+        $columnNames = '|';
+        $fieldsMeta = $dbi->getFieldsMeta($result);
+        foreach ($fieldsMeta as $meta) {
+            $devider .= '---+';
+            $columnNames .= ' ' . $meta->name . ' |';
+        }
 
-            $devider .= "\n";
+        $devider .= "\n";
 
-            $ret .= $devider . $columnNames . "\n" . $devider;
-            while ($row = $dbi->fetchRow($result)) {
-                $values = '|';
-                foreach ($row as $value) {
-                    if ($value === null) {
-                        $value = 'NULL';
-                    }
-
-                    $values .= ' ' . $value . ' |';
+        $ret .= $devider . $columnNames . "\n" . $devider;
+        while ($row = $result->fetchRow()) {
+            $values = '|';
+            foreach ($row as $value) {
+                if ($value === null) {
+                    $value = 'NULL';
                 }
 
-                $ret .= $values . "\n";
+                $values .= ' ' . $value . ' |';
             }
 
-            $ret .= $devider;
+            $ret .= $values . "\n";
         }
+
+        $ret .= $devider;
 
         return $ret;
     }
@@ -520,8 +504,6 @@ class Generator
      * @throws LoaderError
      * @throws RuntimeError
      * @throws SyntaxError
-     *
-     * @access public
      */
     public static function getMessage(
         $message,
@@ -588,11 +570,7 @@ class Generator
                 // when the query is large (for example an INSERT of binary
                 // data), the parser chokes; so avoid parsing the query
                 $queryTooBig = true;
-                $queryBase = mb_substr(
-                    $sqlQuery,
-                    0,
-                    $cfg['MaxCharactersInDisplayedSQL']
-                ) . '[...]';
+                $queryBase = mb_substr($sqlQuery, 0, $cfg['MaxCharactersInDisplayedSQL']) . '[...]';
             } else {
                 $queryBase = $sqlQuery;
             }
@@ -604,11 +582,7 @@ class Generator
             if (! empty($GLOBALS['show_as_php'])) {
                 $newLine = '\\n"<br>' . "\n" . '&nbsp;&nbsp;&nbsp;&nbsp;. "';
                 $queryBase = htmlspecialchars(addslashes($queryBase));
-                $queryBase = preg_replace(
-                    '/((\015\012)|(\015)|(\012))/',
-                    $newLine,
-                    $queryBase
-                );
+                $queryBase = preg_replace('/((\015\012)|(\015)|(\012))/', $newLine, $queryBase);
                 $queryBase = '<code class="php"><pre>' . "\n"
                     . '$sql = "' . $queryBase . '";' . "\n"
                     . '</pre></code>';
@@ -653,19 +627,16 @@ class Generator
                     $explainParams['sql_query'] = 'EXPLAIN ' . $sqlQuery;
                     $explainLink = ' [&nbsp;'
                         . self::linkOrButton(
-                            Url::getFromRoute('/import', $explainParams),
+                            Url::getFromRoute('/import'),
+                            $explainParams,
                             __('Explain SQL')
                         ) . '&nbsp;]';
-                } elseif (
-                    preg_match(
-                        '@^EXPLAIN[[:space:]]+SELECT[[:space:]]+@i',
-                        $sqlQuery
-                    )
-                ) {
+                } elseif (preg_match('@^EXPLAIN[[:space:]]+SELECT[[:space:]]+@i', $sqlQuery)) {
                     $explainParams['sql_query'] = mb_substr($sqlQuery, 8);
                     $explainLink = ' [&nbsp;'
                         . self::linkOrButton(
-                            Url::getFromRoute('/import', $explainParams),
+                            Url::getFromRoute('/import'),
+                            $explainParams,
                             __('Skip Explain SQL')
                         ) . ']';
                     $url = 'https://mariadb.org/explain_analyzer/analyze/'
@@ -674,9 +645,11 @@ class Generator
                     $explainLink .= ' ['
                         . self::linkOrButton(
                             htmlspecialchars('url.php?url=' . urlencode($url)),
+                            null,
                             sprintf(__('Analyze Explain at %s'), 'mariadb.org'),
                             [],
-                            '_blank'
+                            '_blank',
+                            false
                         ) . '&nbsp;]';
                 }
             }
@@ -686,13 +659,9 @@ class Generator
 
             // even if the query is big and was truncated, offer the chance
             // to edit it (unless it's enormous, see linkOrButton() )
-            if (
-                ! empty($cfg['SQLQuery']['Edit'])
-                && empty($GLOBALS['show_as_php'])
-            ) {
-                $editLink .= Url::getCommon($urlParams, '&');
+            if (! empty($cfg['SQLQuery']['Edit']) && empty($GLOBALS['show_as_php'])) {
                 $editLink = ' [&nbsp;'
-                    . self::linkOrButton($editLink, __('Edit'))
+                    . self::linkOrButton($editLink, $urlParams, __('Edit'))
                     . '&nbsp;]';
             } else {
                 $editLink = '';
@@ -704,14 +673,16 @@ class Generator
                 if (! empty($GLOBALS['show_as_php'])) {
                     $phpLink = ' [&nbsp;'
                         . self::linkOrButton(
-                            Url::getFromRoute('/import', $urlParams),
+                            Url::getFromRoute('/import'),
+                            $urlParams,
                             __('Without PHP code')
                         )
                         . '&nbsp;]';
 
                     $phpLink .= ' [&nbsp;'
                         . self::linkOrButton(
-                            Url::getFromRoute('/import', $urlParams),
+                            Url::getFromRoute('/import'),
+                            $urlParams,
                             __('Submit query')
                         )
                         . '&nbsp;]';
@@ -720,7 +691,8 @@ class Generator
                     $phpParams['show_as_php'] = 1;
                     $phpLink = ' [&nbsp;'
                         . self::linkOrButton(
-                            Url::getFromRoute('/import', $phpParams),
+                            Url::getFromRoute('/import'),
+                            $phpParams,
                             __('Create PHP code')
                         )
                         . '&nbsp;]';
@@ -737,7 +709,7 @@ class Generator
             ) {
                 $refreshLink = Url::getFromRoute('/sql', $urlParams);
                 $refreshLink = ' [&nbsp;'
-                    . self::linkOrButton($refreshLink, __('Refresh')) . '&nbsp;]';
+                    . self::linkOrButton($refreshLink, $urlParams, __('Refresh')) . '&nbsp;]';
             } else {
                 $refreshLink = '';
             }
@@ -746,7 +718,7 @@ class Generator
             $retval .= $queryBase;
             $retval .= '</div>';
 
-            $retval .= '<div class="tools print_ignore">';
+            $retval .= '<div class="tools d-print-none">';
             $retval .= '<form action="' . Url::getFromRoute('/sql') . '" method="post">';
             $retval .= Url::getHiddenInputs($GLOBALS['db'], $GLOBALS['table']);
             $retval .= '<input type="hidden" name="sql_query" value="'
@@ -766,14 +738,11 @@ class Generator
             /**
              * TODO: Should we have $cfg['SQLQuery']['InlineEdit']?
              */
-            if (
-                ! empty($cfg['SQLQuery']['Edit'])
-                && ! $queryTooBig
-                && empty($GLOBALS['show_as_php'])
-            ) {
+            if (! empty($cfg['SQLQuery']['Edit']) && ! $queryTooBig && empty($GLOBALS['show_as_php'])) {
                 $inlineEditLink = ' [&nbsp;'
                     . self::linkOrButton(
                         '#',
+                        null,
                         _pgettext('Inline edit query', 'Edit inline'),
                         ['class' => 'inline_edit_sql']
                     )
@@ -798,8 +767,6 @@ class Generator
      * @param string $target anchor in documentation
      *
      * @return string  the html link
-     *
-     * @access public
      */
     public static function showPHPDocumentation($target): string
     {
@@ -814,8 +781,6 @@ class Generator
      * @param bool   $bbcode optional flag indicating whether to output bbcode
      *
      * @return string the html link
-     *
-     * @access public
      */
     public static function showDocumentationLink($link, $target = 'documentation', $bbcode = false): string
     {
@@ -832,18 +797,14 @@ class Generator
      * Displays a MySQL error message in the main panel when $exit is true.
      * Returns the error message otherwise.
      *
-     * @param string|bool $serverMessage Server's error message.
-     * @param string      $sqlQuery      The SQL query that failed.
-     * @param bool        $isModifyLink  Whether to show a "modify" link or not.
-     * @param string      $backUrl       URL for the "back" link (full path is
-     *                                    not required).
-     * @param bool        $exit          Whether execution should be stopped or
-     *                                   the error message should be returned.
+     * @param string $serverMessage Server's error message.
+     * @param string $sqlQuery      The SQL query that failed.
+     * @param bool   $isModifyLink  Whether to show a "modify" link or not.
+     * @param string $backUrl       URL for the "back" link (full path is not required).
+     * @param bool   $exit          Whether execution should be stopped or the error message should be returned.
      *
      * @global string $table The current table.
      * @global string $db    The current database.
-     *
-     * @access public
      */
     public static function mysqlDie(
         $serverMessage = '',
@@ -856,14 +817,12 @@ class Generator
 
         /**
          * Error message to be built.
-         *
-         * @var string $errorMessage
          */
         $errorMessage = '';
 
         // Checking for any server errors.
         if (empty($serverMessage)) {
-            $serverMessage = (string) $dbi->getError();
+            $serverMessage = $dbi->getError();
         }
 
         // Finding the query that failed, if not specified.
@@ -875,22 +834,16 @@ class Generator
 
         /**
          * The lexer used for analysis.
-         *
-         * @var Lexer $lexer
          */
         $lexer = new Lexer($sqlQuery);
 
         /**
          * The parser used for analysis.
-         *
-         * @var Parser $parser
          */
         $parser = new Parser($lexer->list);
 
         /**
          * The errors found by the lexer and the parser.
-         *
-         * @var array $errors
          */
         $errors = ParserError::get(
             [
@@ -970,12 +923,8 @@ class Generator
         }
 
         // Display server's error.
-        if (! empty($serverMessage)) {
-            $serverMessage = (string) preg_replace(
-                "@((\015\012)|(\015)|(\012)){3,}@",
-                "\n\n",
-                (string) $serverMessage
-            );
+        if ($serverMessage !== '') {
+            $serverMessage = (string) preg_replace("@((\015\012)|(\015)|(\012)){3,}@", "\n\n", $serverMessage);
 
             // Adds a link to MySQL documentation.
             $errorMessage .= '<p>' . "\n"
@@ -1018,7 +967,7 @@ class Generator
          * If this is an AJAX request, there is no "Back" link and
          * `Response()` is used to send the response.
          */
-        $response = Response::getInstance();
+        $response = ResponseRenderer::getInstance();
         if ($response->isAjax()) {
             $response->setRequestStatus(false);
             $response->addJSON('message', $errorMessage);
@@ -1095,20 +1044,28 @@ class Generator
      * - URL components are over Suhosin limits
      * - There is SQL query in the parameters
      *
-     * @param string $url       the URL
-     * @param string $message   the link message
-     * @param mixed  $tagParams string: js confirmation; array: additional tag
-     *                           params (f.e. style="")
-     * @param string $target    target
+     * @param string                        $urlPath   the URL
+     * @param array<int|string, mixed>|null $urlParams URL parameters
+     * @param string                        $message   the link message
+     * @param string|array<string, string>  $tagParams string: js confirmation;
+     *                                                 array: additional tag params (f.e. style="")
+     * @param string                        $target    target
      *
      * @return string  the results to be echoed or saved in an array
      */
     public static function linkOrButton(
-        $url,
+        $urlPath,
+        $urlParams,
         $message,
         $tagParams = [],
-        $target = ''
+        $target = '',
+        bool $respectUrlLengthLimit = true
     ): string {
+        $url = $urlPath;
+        if (is_array($urlParams)) {
+            $url = $urlPath . Url::getCommon($urlParams, str_contains($urlPath, '?') ? '&' : '?', false);
+        }
+
         $urlLength = strlen($url);
 
         if (! is_array($tagParams)) {
@@ -1124,7 +1081,7 @@ class Generator
 
         if (! empty($target)) {
             $tagParams['target'] = $target;
-            if ($target === '_blank' && strncmp($url, 'url.php?', 8) == 0) {
+            if ($target === '_blank' && str_starts_with($url, 'url.php?')) {
                 $tagParams['rel'] = 'noopener noreferrer';
             }
         }
@@ -1136,7 +1093,7 @@ class Generator
             if ($suhosinGetMaxValueLength) {
                 $queryParts = Util::splitURLQuery($url);
                 foreach ($queryParts as $queryPair) {
-                    if (strpos($queryPair, '=') === false) {
+                    if (! str_contains($queryPair, '=')) {
                         continue;
                     }
 
@@ -1150,13 +1107,16 @@ class Generator
         }
 
         $tagParamsStrings = [];
-        if (
-            ($urlLength > $GLOBALS['cfg']['LinkLengthLimit'])
-            || ! $inSuhosinLimits
-            // Has as sql_query without a signature
-            || (strpos($url, 'sql_query=') !== false && strpos($url, 'sql_signature=') === false)
-            || strpos($url, 'view[as]=') !== false
-        ) {
+        $isDataPostFormatSupported = ($urlLength > $GLOBALS['cfg']['LinkLengthLimit'])
+                                || ! $inSuhosinLimits
+                                // Has as sql_query without a signature, to be accepted it needs
+                                // to be sent using POST
+                                || (
+                                    str_contains($url, 'sql_query=')
+                                    && ! str_contains($url, 'sql_signature=')
+                                )
+                                || str_contains($url, 'view[as]=');
+        if ($respectUrlLengthLimit && $isDataPostFormatSupported) {
             $parts = explode('?', $url, 2);
             /*
              * The data-post indicates that client should do POST
@@ -1164,11 +1124,13 @@ class Generator
              */
             $tagParamsStrings[] = 'data-post="' . ($parts[1] ?? '') . '"';
             $url = $parts[0];
-            if (
-                array_key_exists('class', $tagParams)
-                && strpos($tagParams['class'], 'create_view') !== false
-            ) {
+            if (array_key_exists('class', $tagParams) && str_contains($tagParams['class'], 'create_view')) {
                 $url .= '?' . explode('&', $parts[1], 2)[0];
+            }
+        } else {
+            $url = $urlPath;
+            if (is_array($urlParams)) {
+                $url = $urlPath . Url::getCommon($urlParams, str_contains($urlPath, '?') ? '&' : '?');
             }
         }
 
@@ -1197,8 +1159,6 @@ class Generator
      *
      * @return string the  html content
      *
-     * @access public
-     *
      * @todo    use $pos from $_url_params
      */
     public static function getListNavigator(
@@ -1218,93 +1178,29 @@ class Generator
             $maxCount = 250;
         }
 
-        $class = $frame === 'frame_navigation' ? ' class="ajax"' : '';
-
-        $listNavigatorHtml = '';
-
+        $pageSelector = '';
         if ($maxCount < $count) {
             $classes[] = 'pageselector';
-            $listNavigatorHtml .= '<div class="' . implode(' ', $classes) . '">';
 
-            if ($frame !== 'frame_navigation') {
-                $listNavigatorHtml .= __('Page number:');
-            }
-
-            // Move to the beginning or to the previous page
-            if ($pos > 0) {
-                $caption1 = '';
-                $caption2 = '';
-                if (Util::showIcons('TableNavigationLinksMode')) {
-                    $caption1 .= '&lt;&lt; ';
-                    $caption2 .= '&lt; ';
-                }
-
-                if (Util::showText('TableNavigationLinksMode')) {
-                    $caption1 .= _pgettext('First page', 'Begin');
-                    $caption2 .= _pgettext('Previous page', 'Previous');
-                }
-
-                $title1 = ' title="' . _pgettext('First page', 'Begin') . '"';
-                $title2 = ' title="' . _pgettext('Previous page', 'Previous') . '"';
-
-                $urlParams[$name] = 0;
-                $listNavigatorHtml .= '<a' . $class . $title1 . ' href="' . $script
-                    . Url::getCommon($urlParams, '&') . '">' . $caption1
-                    . '</a>';
-
-                $urlParams[$name] = $pos - $maxCount;
-                $listNavigatorHtml .= ' <a' . $class . $title2
-                    . ' href="' . $script . Url::getCommon($urlParams, '&') . '">'
-                    . $caption2 . '</a>';
-            }
-
-            $listNavigatorHtml .= '<form action="' . $script
-                . '" method="post">';
-
-            $listNavigatorHtml .= Url::getHiddenInputs($urlParams);
-            $listNavigatorHtml .= Util::pageselector(
+            $pageSelector = Util::pageselector(
                 $name,
                 $maxCount,
                 Util::getPageFromPosition($pos, $maxCount),
                 (int) ceil($count / $maxCount)
             );
-            $listNavigatorHtml .= '</form>';
-
-            if ($pos + $maxCount < $count) {
-                $caption3 = '';
-                $caption4 = '';
-                if (Util::showText('TableNavigationLinksMode')) {
-                    $caption3 .= _pgettext('Next page', 'Next');
-                    $caption4 .= _pgettext('Last page', 'End');
-                }
-
-                if (Util::showIcons('TableNavigationLinksMode')) {
-                    $caption3 .= ' &gt;';
-                    $caption4 .= ' &gt;&gt;';
-                }
-
-                $title3 = ' title="' . _pgettext('Next page', 'Next') . '"';
-                $title4 = ' title="' . _pgettext('Last page', 'End') . '"';
-
-                $urlParams[$name] = $pos + $maxCount;
-                $listNavigatorHtml .= '<a' . $class . $title3 . ' href="' . $script
-                    . Url::getCommon($urlParams, '&') . '" >' . $caption3
-                    . '</a>';
-
-                $urlParams[$name] = floor($count / $maxCount) * $maxCount;
-                if ($urlParams[$name] == $count) {
-                    $urlParams[$name] = $count - $maxCount;
-                }
-
-                $listNavigatorHtml .= ' <a' . $class . $title4
-                    . ' href="' . $script . Url::getCommon($urlParams, '&') . '" >'
-                    . $caption4 . '</a>';
-            }
-
-            $listNavigatorHtml .= '</div>' . "\n";
         }
 
-        return $listNavigatorHtml;
+        return (new Template())->render('list_navigator', [
+            'count' => $count,
+            'max_count' => $maxCount,
+            'classes' => $classes,
+            'frame' => $frame,
+            'position' => $pos,
+            'script' => $script,
+            'url_params' => $urlParams,
+            'param_name' => $name,
+            'page_selector' => $pageSelector,
+        ]);
     }
 
     /**
@@ -1316,22 +1212,13 @@ class Generator
      * @return string the formatted sql
      *
      * @global array  $cfg the configuration array
-     *
-     * @access public
      */
     public static function formatSql($sqlQuery, $truncate = false): string
     {
         global $cfg;
 
-        if (
-            $truncate
-            && mb_strlen($sqlQuery) > $cfg['MaxCharactersInDisplayedSQL']
-        ) {
-            $sqlQuery = mb_substr(
-                $sqlQuery,
-                0,
-                $cfg['MaxCharactersInDisplayedSQL']
-            ) . '[...]';
+        if ($truncate && mb_strlen($sqlQuery) > $cfg['MaxCharactersInDisplayedSQL']) {
+            $sqlQuery = mb_substr($sqlQuery, 0, $cfg['MaxCharactersInDisplayedSQL']) . '[...]';
         }
 
         return '<code class="sql"><pre>' . "\n"
@@ -1357,39 +1244,35 @@ class Generator
             if (is_array($value)) {
                 $retval .= '<optgroup label="' . htmlspecialchars($key) . '">';
                 foreach ($value as $subvalue) {
-                    if ($subvalue == $selected) {
-                        $retval .= sprintf(
-                            '<option selected="selected" title="%s">%s</option>',
-                            $dbi->types->getTypeDescription($subvalue),
-                            $subvalue
-                        );
-                    } elseif ($subvalue === '-') {
+                    if ($subvalue === '-') {
                         $retval .= '<option disabled="disabled">';
                         $retval .= $subvalue;
                         $retval .= '</option>';
-                    } else {
-                        $retval .= sprintf(
-                            '<option title="%s">%s</option>',
-                            $dbi->types->getTypeDescription($subvalue),
-                            $subvalue
-                        );
+                        continue;
                     }
+
+                    $isLengthRestricted = Compatibility::isIntegersSupportLength($subvalue, '2', $dbi);
+                    $retval .= sprintf(
+                        '<option data-length-restricted="%b" %s title="%s">%s</option>',
+                        $isLengthRestricted ? 0 : 1,
+                        $selected === $subvalue ? 'selected="selected"' : '',
+                        $dbi->types->getTypeDescription($subvalue),
+                        $subvalue
+                    );
                 }
 
                 $retval .= '</optgroup>';
-            } elseif ($selected == $value) {
-                $retval .= sprintf(
-                    '<option selected="selected" title="%s">%s</option>',
-                    $dbi->types->getTypeDescription($value),
-                    $value
-                );
-            } else {
-                $retval .= sprintf(
-                    '<option title="%s">%s</option>',
-                    $dbi->types->getTypeDescription($value),
-                    $value
-                );
+                continue;
             }
+
+            $isLengthRestricted = Compatibility::isIntegersSupportLength($value, '2', $dbi);
+            $retval .= sprintf(
+                '<option data-length-restricted="%b" %s title="%s">%s</option>',
+                $isLengthRestricted ? 0 : 1,
+                $selected === $value ? 'selected="selected"' : '',
+                $dbi->types->getTypeDescription($value),
+                $value
+            );
         }
 
         return $retval;

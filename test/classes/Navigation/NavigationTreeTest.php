@@ -18,8 +18,6 @@ class NavigationTreeTest extends AbstractTestCase
 
     /**
      * Sets up the fixture.
-     *
-     * @access protected
      */
     protected function setUp(): void
     {
@@ -28,15 +26,12 @@ class NavigationTreeTest extends AbstractTestCase
         parent::setGlobalConfig();
         parent::setTheme();
         $GLOBALS['server'] = 1;
-        $GLOBALS['config']->enableBc();
         $GLOBALS['cfg']['Server']['host'] = 'localhost';
         $GLOBALS['cfg']['Server']['user'] = 'user';
         $GLOBALS['cfg']['Server']['pmadb'] = '';
         $GLOBALS['cfg']['Server']['DisableIS'] = false;
-        $GLOBALS['cfgRelation']['db'] = 'pmadb';
-        $GLOBALS['cfgRelation']['navigationhiding'] = 'navigationhiding';
         $GLOBALS['cfg']['NavigationTreeEnableGrouping'] = true;
-        $GLOBALS['cfg']['ShowDatabasesNavigationAsTree']  = true;
+        $GLOBALS['cfg']['ShowDatabasesNavigationAsTree'] = true;
 
         $GLOBALS['db'] = 'db';
         $GLOBALS['table'] = '';
@@ -47,8 +42,6 @@ class NavigationTreeTest extends AbstractTestCase
 
     /**
      * Tears down the fixture.
-     *
-     * @access protected
      */
     protected function tearDown(): void
     {

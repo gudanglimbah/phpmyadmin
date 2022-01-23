@@ -38,20 +38,18 @@ class ExportCodegen extends ExportPlugin
     private const HANDLER_NHIBERNATE_CS = 0;
     private const HANDLER_NHIBERNATE_XML = 1;
 
-    public function __construct()
+    /**
+     * @psalm-return non-empty-lowercase-string
+     */
+    public function getName(): string
     {
-        parent::__construct();
-        // initialize the specific export CodeGen variables
-        $this->initSpecificVariables();
-        $this->setProperties();
+        return 'codegen';
     }
 
     /**
-     * Initialize the local variables that are used for export CodeGen
-     *
-     * @return void
+     * Initialize the local variables that are used for export CodeGen.
      */
-    protected function initSpecificVariables()
+    protected function init(): void
     {
         $this->setCgFormats([
             self::HANDLER_NHIBERNATE_CS => 'NHibernate C# DO',
@@ -59,12 +57,7 @@ class ExportCodegen extends ExportPlugin
         ]);
     }
 
-    /**
-     * Sets the export CodeGen properties
-     *
-     * @return void
-     */
-    protected function setProperties()
+    protected function setProperties(): ExportPluginProperties
     {
         $exportPluginProperties = new ExportPluginProperties();
         $exportPluginProperties->setText('CodeGen');
@@ -75,9 +68,7 @@ class ExportCodegen extends ExportPlugin
         // create the root group that will be the options field for
         // $exportPluginProperties
         // this will be shown as "Format specific options"
-        $exportSpecificOptions = new OptionsPropertyRootGroup(
-            'Format Specific Options'
-        );
+        $exportSpecificOptions = new OptionsPropertyRootGroup('Format Specific Options');
 
         // general options main group
         $generalOptions = new OptionsPropertyMainGroup('general_opts');
@@ -95,25 +86,22 @@ class ExportCodegen extends ExportPlugin
 
         // set the options for the export plugin property item
         $exportPluginProperties->setOptions($exportSpecificOptions);
-        $this->properties = $exportPluginProperties;
+
+        return $exportPluginProperties;
     }
 
     /**
      * Outputs export header
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportHeader()
+    public function exportHeader(): bool
     {
         return true;
     }
 
     /**
      * Outputs export footer
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportFooter()
+    public function exportFooter(): bool
     {
         return true;
     }
@@ -123,10 +111,8 @@ class ExportCodegen extends ExportPlugin
      *
      * @param string $db      Database name
      * @param string $dbAlias Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBHeader($db, $dbAlias = '')
+    public function exportDBHeader($db, $dbAlias = ''): bool
     {
         return true;
     }
@@ -135,10 +121,8 @@ class ExportCodegen extends ExportPlugin
      * Outputs database footer
      *
      * @param string $db Database name
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBFooter($db)
+    public function exportDBFooter($db): bool
     {
         return true;
     }
@@ -149,10 +133,8 @@ class ExportCodegen extends ExportPlugin
      * @param string $db         Database name
      * @param string $exportType 'server', 'database', 'table'
      * @param string $dbAlias    Aliases of db
-     *
-     * @return bool Whether it succeeded
      */
-    public function exportDBCreate($db, $exportType, $dbAlias = '')
+    public function exportDBCreate($db, $exportType, $dbAlias = ''): bool
     {
         return true;
     }
@@ -166,8 +148,6 @@ class ExportCodegen extends ExportPlugin
      * @param string $errorUrl the url to go back in case of error
      * @param string $sqlQuery SQL query for obtaining data
      * @param array  $aliases  Aliases of db/table/columns
-     *
-     * @return bool Whether it succeeded
      */
     public function exportData(
         $db,
@@ -176,7 +156,7 @@ class ExportCodegen extends ExportPlugin
         $errorUrl,
         $sqlQuery,
         array $aliases = []
-    ) {
+    ): bool {
         $format = (int) $GLOBALS['codegen_format'];
 
         if ($format === self::HANDLER_NHIBERNATE_CS) {
@@ -231,7 +211,6 @@ class ExportCodegen extends ExportPlugin
         $db_alias = $db;
         $table_alias = $table;
         $this->initAlias($aliases, $db_alias, $table_alias);
-        $lines = [];
 
         $result = $dbi->query(
             sprintf(
@@ -240,87 +219,82 @@ class ExportCodegen extends ExportPlugin
                 Util::backquote($table)
             )
         );
-        if ($result) {
-            /** @var TableProperty[] $tableProperties */
-            $tableProperties = [];
-            while ($row = $dbi->fetchRow($result)) {
-                $col_as = $this->getAlias($aliases, $row[0], 'col', $db, $table);
-                if (! empty($col_as)) {
-                    $row[0] = $col_as;
-                }
 
-                $tableProperties[] = new TableProperty($row);
+        /** @var TableProperty[] $tableProperties */
+        $tableProperties = [];
+        while ($row = $result->fetchRow()) {
+            $col_as = $this->getAlias($aliases, $row[0], 'col', $db, $table);
+            if (! empty($col_as)) {
+                $row[0] = $col_as;
             }
 
-            $dbi->freeResult($result);
-            $lines[] = 'using System;';
-            $lines[] = 'using System.Collections;';
-            $lines[] = 'using System.Collections.Generic;';
-            $lines[] = 'using System.Text;';
-            $lines[] = 'namespace ' . self::cgMakeIdentifier($db_alias);
-            $lines[] = '{';
-            $lines[] = '    #region '
-                . self::cgMakeIdentifier($table_alias);
-            $lines[] = '    public class '
-                . self::cgMakeIdentifier($table_alias);
-            $lines[] = '    {';
-            $lines[] = '        #region Member Variables';
-            foreach ($tableProperties as $tableProperty) {
-                $lines[] = $tableProperty->formatCs(
-                    '        protected #dotNetPrimitiveType# _#name#;'
-                );
-            }
-
-            $lines[] = '        #endregion';
-            $lines[] = '        #region Constructors';
-            $lines[] = '        public '
-                . self::cgMakeIdentifier($table_alias) . '() { }';
-            $temp = [];
-            foreach ($tableProperties as $tableProperty) {
-                if ($tableProperty->isPK()) {
-                    continue;
-                }
-
-                $temp[] = $tableProperty->formatCs(
-                    '#dotNetPrimitiveType# #name#'
-                );
-            }
-
-            $lines[] = '        public '
-                . self::cgMakeIdentifier($table_alias)
-                . '('
-                . implode(', ', $temp)
-                . ')';
-            $lines[] = '        {';
-            foreach ($tableProperties as $tableProperty) {
-                if ($tableProperty->isPK()) {
-                    continue;
-                }
-
-                $lines[] = $tableProperty->formatCs(
-                    '            this._#name#=#name#;'
-                );
-            }
-
-            $lines[] = '        }';
-            $lines[] = '        #endregion';
-            $lines[] = '        #region Public Properties';
-            foreach ($tableProperties as $tableProperty) {
-                $lines[] = $tableProperty->formatCs(
-                    '        public virtual #dotNetPrimitiveType# #ucfirstName#'
-                    . "\n"
-                    . '        {' . "\n"
-                    . '            get {return _#name#;}' . "\n"
-                    . '            set {_#name#=value;}' . "\n"
-                    . '        }'
-                );
-            }
-
-            $lines[] = '        #endregion';
-            $lines[] = '    }';
-            $lines[] = '    #endregion';
-            $lines[] = '}';
+            $tableProperties[] = new TableProperty($row);
         }
+
+        unset($result);
+
+        $lines = [];
+        $lines[] = 'using System;';
+        $lines[] = 'using System.Collections;';
+        $lines[] = 'using System.Collections.Generic;';
+        $lines[] = 'using System.Text;';
+        $lines[] = 'namespace ' . self::cgMakeIdentifier($db_alias);
+        $lines[] = '{';
+        $lines[] = '    #region '
+            . self::cgMakeIdentifier($table_alias);
+        $lines[] = '    public class '
+            . self::cgMakeIdentifier($table_alias);
+        $lines[] = '    {';
+        $lines[] = '        #region Member Variables';
+        foreach ($tableProperties as $tableProperty) {
+            $lines[] = $tableProperty->formatCs('        protected #dotNetPrimitiveType# _#name#;');
+        }
+
+        $lines[] = '        #endregion';
+        $lines[] = '        #region Constructors';
+        $lines[] = '        public '
+            . self::cgMakeIdentifier($table_alias) . '() { }';
+        $temp = [];
+        foreach ($tableProperties as $tableProperty) {
+            if ($tableProperty->isPK()) {
+                continue;
+            }
+
+            $temp[] = $tableProperty->formatCs('#dotNetPrimitiveType# #name#');
+        }
+
+        $lines[] = '        public '
+            . self::cgMakeIdentifier($table_alias)
+            . '('
+            . implode(', ', $temp)
+            . ')';
+        $lines[] = '        {';
+        foreach ($tableProperties as $tableProperty) {
+            if ($tableProperty->isPK()) {
+                continue;
+            }
+
+            $lines[] = $tableProperty->formatCs('            this._#name#=#name#;');
+        }
+
+        $lines[] = '        }';
+        $lines[] = '        #endregion';
+        $lines[] = '        #region Public Properties';
+        foreach ($tableProperties as $tableProperty) {
+            $lines[] = $tableProperty->formatCs(
+                '        public virtual #dotNetPrimitiveType# #ucfirstName#'
+                . "\n"
+                . '        {' . "\n"
+                . '            get {return _#name#;}' . "\n"
+                . '            set {_#name#=value;}' . "\n"
+                . '        }'
+            );
+        }
+
+        $lines[] = '        #endregion';
+        $lines[] = '    }';
+        $lines[] = '    #endregion';
+        $lines[] = '}';
 
         return implode($crlf, $lines);
     }
@@ -347,7 +321,7 @@ class ExportCodegen extends ExportPlugin
         $table_alias = $table;
         $this->initAlias($aliases, $db_alias, $table_alias);
         $lines = [];
-        $lines[] = '<?xml version="1.0" encoding="utf-8" ?' . '>';
+        $lines[] = '<?xml version="1.0" encoding="utf-8" ?>';
         $lines[] = '<hibernate-mapping xmlns="urn:nhibernate-mapping-2.2" '
             . 'namespace="' . self::cgMakeIdentifier($db_alias) . '" '
             . 'assembly="' . self::cgMakeIdentifier($db_alias) . '">';
@@ -361,36 +335,33 @@ class ExportCodegen extends ExportPlugin
                 Util::backquote($table)
             )
         );
-        if ($result) {
-            while ($row = $dbi->fetchRow($result)) {
-                $col_as = $this->getAlias($aliases, $row[0], 'col', $db, $table);
-                if (! empty($col_as)) {
-                    $row[0] = $col_as;
-                }
 
-                $tableProperty = new TableProperty($row);
-                if ($tableProperty->isPK()) {
-                    $lines[] = $tableProperty->formatXml(
-                        '        <id name="#ucfirstName#" type="#dotNetObjectType#"'
-                        . ' unsaved-value="0">' . "\n"
-                        . '            <column name="#name#" sql-type="#type#"'
-                        . ' not-null="#notNull#" unique="#unique#"'
-                        . ' index="PRIMARY"/>' . "\n"
-                        . '            <generator class="native" />' . "\n"
-                        . '        </id>'
-                    );
-                } else {
-                    $lines[] = $tableProperty->formatXml(
-                        '        <property name="#ucfirstName#"'
-                        . ' type="#dotNetObjectType#">' . "\n"
-                        . '            <column name="#name#" sql-type="#type#"'
-                        . ' not-null="#notNull#" #indexName#/>' . "\n"
-                        . '        </property>'
-                    );
-                }
+        while ($row = $result->fetchRow()) {
+            $col_as = $this->getAlias($aliases, $row[0], 'col', $db, $table);
+            if (! empty($col_as)) {
+                $row[0] = $col_as;
             }
 
-            $dbi->freeResult($result);
+            $tableProperty = new TableProperty($row);
+            if ($tableProperty->isPK()) {
+                $lines[] = $tableProperty->formatXml(
+                    '        <id name="#ucfirstName#" type="#dotNetObjectType#"'
+                    . ' unsaved-value="0">' . "\n"
+                    . '            <column name="#name#" sql-type="#type#"'
+                    . ' not-null="#notNull#" unique="#unique#"'
+                    . ' index="PRIMARY"/>' . "\n"
+                    . '            <generator class="native" />' . "\n"
+                    . '        </id>'
+                );
+            } else {
+                $lines[] = $tableProperty->formatXml(
+                    '        <property name="#ucfirstName#"'
+                    . ' type="#dotNetObjectType#">' . "\n"
+                    . '            <column name="#name#" sql-type="#type#"'
+                    . ' not-null="#notNull#" #indexName#/>' . "\n"
+                    . '        </property>'
+                );
+            }
         }
 
         $lines[] = '    </class>';
@@ -413,10 +384,8 @@ class ExportCodegen extends ExportPlugin
      * Setter for CodeGen formats
      *
      * @param array $CG_FORMATS contains CodeGen Formats
-     *
-     * @return void
      */
-    private function setCgFormats(array $CG_FORMATS)
+    private function setCgFormats(array $CG_FORMATS): void
     {
         $this->cgFormats = $CG_FORMATS;
     }

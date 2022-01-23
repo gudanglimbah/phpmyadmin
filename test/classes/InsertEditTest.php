@@ -6,12 +6,12 @@ namespace PhpMyAdmin\Tests;
 
 use PhpMyAdmin\Core;
 use PhpMyAdmin\DatabaseInterface;
+use PhpMyAdmin\Dbal\Warning;
 use PhpMyAdmin\FieldMetadata;
-use PhpMyAdmin\Header;
 use PhpMyAdmin\InsertEdit;
-use PhpMyAdmin\Response;
-use PhpMyAdmin\Scripts;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Table;
+use PhpMyAdmin\Tests\Stubs\DummyResult;
 use PhpMyAdmin\Url;
 use ReflectionProperty;
 use stdClass;
@@ -42,7 +42,6 @@ class InsertEditTest extends AbstractTestCase
         parent::setUp();
         parent::setLanguage();
         parent::setGlobalConfig();
-        parent::loadDefaultConfig();
         parent::setTheme();
         $GLOBALS['server'] = 1;
         $GLOBALS['PMA_PHP_SELF'] = 'index.php';
@@ -80,7 +79,7 @@ class InsertEditTest extends AbstractTestCase
     protected function tearDown(): void
     {
         parent::tearDown();
-        $response = new ReflectionProperty(Response::class, 'instance');
+        $response = new ReflectionProperty(ResponseRenderer::class, 'instance');
         $response->setAccessible(true);
         $response->setValue(null);
         $response->setAccessible(false);
@@ -109,10 +108,10 @@ class InsertEditTest extends AbstractTestCase
 
         $this->assertEquals(
             [
-                'db'        => 'dbname',
-                'table'     => 'tablename',
-                'goto'      => 'index.php',
-                'err_url'   => 'localhost',
+                'db' => 'dbname',
+                'table' => 'tablename',
+                'goto' => 'index.php',
+                'err_url' => 'localhost',
                 'sql_query' => 'SELECT a',
                 'where_clause[foo]' => 'bar',
                 'where_clause[1]' => 'test',
@@ -172,23 +171,24 @@ class InsertEditTest extends AbstractTestCase
             'b="fo\o"',
         ];
 
+        $resultStub1 = $this->createMock(DummyResult::class);
+        $resultStub2 = $this->createMock(DummyResult::class);
+
         $dbi = $this->getMockBuilder(DatabaseInterface::class)
             ->disableOriginalConstructor()
             ->getMock();
 
         $dbi->expects($this->exactly(2))
             ->method('query')
-            ->willReturnOnConsecutiveCalls(
-                'result1',
-                'result2'
-            );
+            ->willReturnOnConsecutiveCalls($resultStub1, $resultStub2);
 
-        $dbi->expects($this->exactly(2))
+        $resultStub1->expects($this->once())
             ->method('fetchAssoc')
-            ->willReturnOnConsecutiveCalls(
-                ['assoc1'],
-                ['assoc2']
-            );
+            ->will($this->returnValue(['assoc1']));
+
+        $resultStub2->expects($this->once())
+            ->method('fetchAssoc')
+            ->will($this->returnValue(['assoc2']));
 
         $dbi->expects($this->exactly(2))
             ->method('getFieldsMeta')
@@ -210,21 +210,21 @@ class InsertEditTest extends AbstractTestCase
             ]
         );
 
-        $this->assertEquals(
+        $this->assertSame(
             [
                 [
                     'a=1',
                     'b="fo\\\\o"',
                 ],
                 [
-                    'result1',
-                    'result2',
+                    $resultStub1,
+                    $resultStub2,
                 ],
                 [
                     ['assoc1'],
                     ['assoc2'],
                 ],
-                '',
+                false,
             ],
             $result
         );
@@ -240,13 +240,15 @@ class InsertEditTest extends AbstractTestCase
         $temp->table = 'table';
         $meta_arr = [new FieldMetadata(MYSQLI_TYPE_DECIMAL, MYSQLI_PRI_KEY_FLAG, $temp)];
 
+        $resultStub = $this->createMock(DummyResult::class);
+
         $dbi = $this->getMockBuilder(DatabaseInterface::class)
             ->disableOriginalConstructor()
             ->getMock();
 
         $dbi->expects($this->once())
             ->method('getFieldsMeta')
-            ->with('result1')
+            ->with($resultStub)
             ->will($this->returnValue($meta_arr));
 
         $GLOBALS['dbi'] = $dbi;
@@ -261,7 +263,7 @@ class InsertEditTest extends AbstractTestCase
                 1,
                 [],
                 'SELECT',
-                ['1' => 'result1'],
+                ['1' => $resultStub],
             ]
         );
 
@@ -270,13 +272,13 @@ class InsertEditTest extends AbstractTestCase
         // case 2
         $GLOBALS['cfg']['ShowSQL'] = false;
 
-        $responseMock = $this->getMockBuilder(Response::class)
+        $responseMock = $this->getMockBuilder(ResponseRenderer::class)
             ->disableOriginalConstructor()
             ->onlyMethods(['addHtml'])
             ->getMock();
 
-        $restoreInstance = Response::getInstance();
-        $response = new ReflectionProperty(Response::class, 'instance');
+        $restoreInstance = ResponseRenderer::getInstance();
+        $response = new ReflectionProperty(ResponseRenderer::class, 'instance');
         $response->setAccessible(true);
         $response->setValue($responseMock);
 
@@ -345,6 +347,8 @@ class InsertEditTest extends AbstractTestCase
     {
         $GLOBALS['cfg']['InsertRows'] = $configValue;
 
+        $resultStub = $this->createMock(DummyResult::class);
+
         $dbi = $this->getMockBuilder(DatabaseInterface::class)
             ->disableOriginalConstructor()
             ->getMock();
@@ -352,11 +356,9 @@ class InsertEditTest extends AbstractTestCase
         $dbi->expects($this->once())
             ->method('query')
             ->with(
-                'SELECT * FROM `db`.`table` LIMIT 1;',
-                DatabaseInterface::CONNECT_USER,
-                DatabaseInterface::QUERY_STORE
+                'SELECT * FROM `db`.`table` LIMIT 1;'
             )
-            ->will($this->returnValue('result1'));
+            ->will($this->returnValue($resultStub));
 
         $GLOBALS['dbi'] = $dbi;
         $this->insertEdit = new InsertEdit($GLOBALS['dbi']);
@@ -370,7 +372,7 @@ class InsertEditTest extends AbstractTestCase
 
         $this->assertEquals(
             [
-                'result1',
+                $resultStub,
                 $rowsValue,
             ],
             $result
@@ -411,66 +413,42 @@ class InsertEditTest extends AbstractTestCase
 
         $result = $this->insertEdit->showTypeOrFunction('function', $url_params, false);
 
-        $this->assertStringContainsString(
-            'index.php?route=/table/change',
-            $result
-        );
+        $this->assertStringContainsString('index.php?route=/table/change', $result);
         $this->assertStringContainsString(
             'ShowFunctionFields=1&ShowFieldTypesInDataEditView=1&goto=index.php%3Froute%3D%2Fsql',
             $result
         );
-        $this->assertStringContainsString(
-            'Function',
-            $result
-        );
+        $this->assertStringContainsString('Function', $result);
 
         // case 2
         $result = $this->insertEdit->showTypeOrFunction('function', $url_params, true);
 
-        $this->assertStringContainsString(
-            'index.php?route=/table/change',
-            $result
-        );
+        $this->assertStringContainsString('index.php?route=/table/change', $result);
         $this->assertStringContainsString(
             'ShowFunctionFields=0&ShowFieldTypesInDataEditView=1&goto=index.php%3Froute%3D%2Fsql',
             $result
         );
-        $this->assertStringContainsString(
-            'Function',
-            $result
-        );
+        $this->assertStringContainsString('Function', $result);
 
         // case 3
         $result = $this->insertEdit->showTypeOrFunction('type', $url_params, false);
 
-        $this->assertStringContainsString(
-            'index.php?route=/table/change',
-            $result
-        );
+        $this->assertStringContainsString('index.php?route=/table/change', $result);
         $this->assertStringContainsString(
             'ShowFunctionFields=1&ShowFieldTypesInDataEditView=1&goto=index.php%3Froute%3D%2Fsql',
             $result
         );
-        $this->assertStringContainsString(
-            'Type',
-            $result
-        );
+        $this->assertStringContainsString('Type', $result);
 
         // case 4
         $result = $this->insertEdit->showTypeOrFunction('type', $url_params, true);
 
-        $this->assertStringContainsString(
-            'index.php?route=/table/change',
-            $result
-        );
+        $this->assertStringContainsString('index.php?route=/table/change', $result);
         $this->assertStringContainsString(
             'ShowFunctionFields=1&ShowFieldTypesInDataEditView=0&goto=index.php%3Froute%3D%2Fsql',
             $result
         );
-        $this->assertStringContainsString(
-            'Type',
-            $result
-        );
+        $this->assertStringContainsString('Type', $result);
     }
 
     /**
@@ -495,60 +473,27 @@ class InsertEditTest extends AbstractTestCase
             ]
         );
 
-        $this->assertEquals(
-            $result['Field_html'],
-            '1&lt;2'
-        );
+        $this->assertEquals($result['Field_html'], '1&lt;2');
 
-        $this->assertEquals(
-            $result['Field_md5'],
-            '4342210df36bf2ff2c4e2a997a6d4089'
-        );
+        $this->assertEquals($result['Field_md5'], '4342210df36bf2ff2c4e2a997a6d4089');
 
-        $this->assertEquals(
-            $result['True_Type'],
-            'float'
-        );
+        $this->assertEquals($result['True_Type'], 'float');
 
-        $this->assertEquals(
-            $result['len'],
-            100
-        );
+        $this->assertEquals($result['len'], 100);
 
-        $this->assertEquals(
-            $result['Field_title'],
-            '1&lt;2'
-        );
+        $this->assertEquals($result['Field_title'], '1&lt;2');
 
-        $this->assertEquals(
-            $result['is_binary'],
-            false
-        );
+        $this->assertEquals($result['is_binary'], false);
 
-        $this->assertEquals(
-            $result['is_blob'],
-            false
-        );
+        $this->assertEquals($result['is_blob'], false);
 
-        $this->assertEquals(
-            $result['is_char'],
-            false
-        );
+        $this->assertEquals($result['is_char'], false);
 
-        $this->assertEquals(
-            $result['pma_type'],
-            'float(10, 1)'
-        );
+        $this->assertEquals($result['pma_type'], 'float(10, 1)');
 
-        $this->assertEquals(
-            $result['wrap'],
-            ' text-nowrap'
-        );
+        $this->assertEquals($result['wrap'], ' text-nowrap');
 
-        $this->assertEquals(
-            $result['Field'],
-            '1<2'
-        );
+        $this->assertEquals($result['Field'], '1<2');
     }
 
     /**
@@ -586,15 +531,9 @@ class InsertEditTest extends AbstractTestCase
             ]
         );
 
-        $this->assertStringContainsString(
-            'title="comment&gt;"',
-            $result
-        );
+        $this->assertStringContainsString('title="comment&gt;"', $result);
 
-        $this->assertStringContainsString(
-            'f1&lt;',
-            $result
-        );
+        $this->assertStringContainsString('f1&lt;', $result);
     }
 
     /**
@@ -901,22 +840,16 @@ class InsertEditTest extends AbstractTestCase
      */
     public function testGetColumnEnumValues(): void
     {
-        $extracted_columnspec = $column = [];
-        $extracted_columnspec['enum_set_values'] = [
+        $enum_set_values = [
             '<abc>',
             '"foo"',
         ];
-
-        $column['values'] = 'abc';
 
         $result = $this->callFunction(
             $this->insertEdit,
             InsertEdit::class,
             'getColumnEnumValues',
-            [
-                $column,
-                $extracted_columnspec,
-            ]
+            [$enum_set_values]
         );
         $this->assertEquals(
             [
@@ -938,8 +871,8 @@ class InsertEditTest extends AbstractTestCase
      */
     public function testGetColumnSetValueAndSelectSize(): void
     {
-        $extracted_columnspec = $column = [];
-        $extracted_columnspec['enum_set_values'] = [
+        $column = [];
+        $enum_set_values = [
             'a',
             '<',
         ];
@@ -949,7 +882,7 @@ class InsertEditTest extends AbstractTestCase
             'getColumnSetValueAndSelectSize',
             [
                 [],
-                $extracted_columnspec,
+                $enum_set_values,
             ]
         );
 
@@ -981,7 +914,7 @@ class InsertEditTest extends AbstractTestCase
             'getColumnSetValueAndSelectSize',
             [
                 $column,
-                $extracted_columnspec,
+                $enum_set_values,
             ]
         );
 
@@ -1088,15 +1021,14 @@ class InsertEditTest extends AbstractTestCase
      */
     public function testGetMaxUploadSize(): void
     {
-        $GLOBALS['max_upload_size'] = 257;
-        $column = [];
-        $column['pma_type'] = 'tinyblob';
+        $GLOBALS['config']->set('max_upload_size', 257);
+        $pma_type = 'tinyblob';
         $result = $this->callFunction(
             $this->insertEdit,
             InsertEdit::class,
             'getMaxUploadSize',
             [
-                $column,
+                $pma_type,
                 256,
             ]
         );
@@ -1110,14 +1042,14 @@ class InsertEditTest extends AbstractTestCase
         );
 
         // case 2
-        $GLOBALS['max_upload_size'] = 250;
-        $column['pma_type'] = 'tinyblob';
+        $GLOBALS['config']->set('max_upload_size', 250);
+        $pma_type = 'tinyblob';
         $result = $this->callFunction(
             $this->insertEdit,
             InsertEdit::class,
             'getMaxUploadSize',
             [
-                $column,
+                $pma_type,
                 20,
             ]
         );
@@ -1152,7 +1084,7 @@ class InsertEditTest extends AbstractTestCase
         $GLOBALS['cfg']['ShowFunctionFields'] = true;
 
         $extracted_columnspec = [];
-        $extracted_columnspec['spec_in_brackets'] = 25;
+        $extracted_columnspec['spec_in_brackets'] = '25';
         $result = $this->callFunction(
             $this->insertEdit,
             InsertEdit::class,
@@ -1244,10 +1176,7 @@ class InsertEditTest extends AbstractTestCase
             ]
         );
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="fields_typeb" value="datetime">',
-            $result
-        );
+        $this->assertStringContainsString('<input type="hidden" name="fields_typeb" value="datetime">', $result);
 
         // case 4: (else -> date)
         $column['pma_type'] = 'date';
@@ -1273,10 +1202,7 @@ class InsertEditTest extends AbstractTestCase
             ]
         );
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="fields_typeb" value="date">',
-            $result
-        );
+        $this->assertStringContainsString('<input type="hidden" name="fields_typeb" value="date">', $result);
     }
 
     /**
@@ -1284,9 +1210,9 @@ class InsertEditTest extends AbstractTestCase
      */
     public function testGetColumnSize(): void
     {
-        $column = $extracted_columnspec = [];
+        $column = [];
         $column['is_char'] = true;
-        $extracted_columnspec['spec_in_brackets'] = 45;
+        $spec_in_brackets = '45';
         $GLOBALS['cfg']['MinSizeForInputField'] = 30;
         $GLOBALS['cfg']['MaxSizeForInputField'] = 40;
 
@@ -1298,15 +1224,12 @@ class InsertEditTest extends AbstractTestCase
                 'getColumnSize',
                 [
                     $column,
-                    $extracted_columnspec,
+                    $spec_in_brackets,
                 ]
             )
         );
 
-        $this->assertEquals(
-            'textarea',
-            $GLOBALS['cfg']['CharEditing']
-        );
+        $this->assertEquals('textarea', $GLOBALS['cfg']['CharEditing']);
 
         // case 2
         $column['is_char'] = false;
@@ -1319,7 +1242,7 @@ class InsertEditTest extends AbstractTestCase
                 'getColumnSize',
                 [
                     $column,
-                    $extracted_columnspec,
+                    $spec_in_brackets,
                 ]
             )
         );
@@ -1337,12 +1260,7 @@ class InsertEditTest extends AbstractTestCase
         $_POST['where_clause'] = true;
         $_POST['sql_query'] = 'SELECT 1';
 
-        $result = $this->insertEdit->getContinueInsertionForm(
-            'tbl',
-            'db',
-            $where_clause_array,
-            'localhost'
-        );
+        $result = $this->insertEdit->getContinueInsertionForm('tbl', 'db', $where_clause_array, 'localhost');
 
         $this->assertStringContainsString(
             '<form id="continueForm" method="post" action="' . Url::getFromRoute('/table/replace')
@@ -1350,35 +1268,17 @@ class InsertEditTest extends AbstractTestCase
             $result
         );
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="db" value="db">',
-            $result
-        );
+        $this->assertStringContainsString('<input type="hidden" name="db" value="db">', $result);
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="table" value="tbl">',
-            $result
-        );
+        $this->assertStringContainsString('<input type="hidden" name="table" value="tbl">', $result);
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="goto" value="index.php">',
-            $result
-        );
+        $this->assertStringContainsString('<input type="hidden" name="goto" value="index.php">', $result);
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="err_url" value="localhost">',
-            $result
-        );
+        $this->assertStringContainsString('<input type="hidden" name="err_url" value="localhost">', $result);
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="sql_query" value="SELECT 1">',
-            $result
-        );
+        $this->assertStringContainsString('<input type="hidden" name="sql_query" value="SELECT 1">', $result);
 
-        $this->assertStringContainsString(
-            '<input type="hidden" name="where_clause[0]" value="a&lt;b">',
-            $result
-        );
+        $this->assertStringContainsString('<input type="hidden" name="where_clause[0]" value="a&lt;b">', $result);
     }
 
     public function testIsWhereClauseNumeric(): void
@@ -1409,20 +1309,11 @@ class InsertEditTest extends AbstractTestCase
             [$url_params]
         );
 
-        $this->assertStringContainsString(
-            'index.php?route=/table/change',
-            $result
-        );
+        $this->assertStringContainsString('index.php?route=/table/change', $result);
 
-        $this->assertStringContainsString(
-            'ShowFunctionFields=1&ShowFieldTypesInDataEditView=0',
-            $result
-        );
+        $this->assertStringContainsString('ShowFunctionFields=1&ShowFieldTypesInDataEditView=0', $result);
 
-        $this->assertStringContainsString(
-            'ShowFunctionFields=0&ShowFieldTypesInDataEditView=1',
-            $result
-        );
+        $this->assertStringContainsString('ShowFunctionFields=0&ShowFieldTypesInDataEditView=1', $result);
     }
 
     /**
@@ -1445,7 +1336,6 @@ class InsertEditTest extends AbstractTestCase
                 $current_row,
                 $column,
                 [],
-                false,
                 [],
                 'a',
                 false,
@@ -1467,7 +1357,7 @@ class InsertEditTest extends AbstractTestCase
         unset($_POST['default_action']);
 
         $current_row['f'] = '123';
-        $extracted_columnspec['spec_in_brackets'] = 20;
+        $extracted_columnspec['spec_in_brackets'] = '20';
         $column['True_Type'] = 'bit';
 
         $result = $this->callFunction(
@@ -1478,7 +1368,6 @@ class InsertEditTest extends AbstractTestCase
                 $current_row,
                 $column,
                 $extracted_columnspec,
-                false,
                 [],
                 'a',
                 false,
@@ -1505,7 +1394,6 @@ class InsertEditTest extends AbstractTestCase
                 $current_row,
                 $column,
                 $extracted_columnspec,
-                false,
                 [],
                 'a',
                 true,
@@ -1532,7 +1420,7 @@ class InsertEditTest extends AbstractTestCase
         $this->insertEdit = new InsertEdit($GLOBALS['dbi']);
 
         $current_row['f'] = '123';
-        $extracted_columnspec['spec_in_brackets'] = 20;
+        $extracted_columnspec['spec_in_brackets'] = '20';
         $column['True_Type'] = 'int';
 
         $result = $this->callFunction(
@@ -1543,7 +1431,6 @@ class InsertEditTest extends AbstractTestCase
                 $current_row,
                 $column,
                 $extracted_columnspec,
-                false,
                 ['int'],
                 'a',
                 false,
@@ -1566,7 +1453,7 @@ class InsertEditTest extends AbstractTestCase
         $column['is_blob'] = true;
         $GLOBALS['cfg']['ProtectBinary'] = false;
         $current_row['f'] = '11001';
-        $extracted_columnspec['spec_in_brackets'] = 20;
+        $extracted_columnspec['spec_in_brackets'] = '20';
         $column['True_Type'] = 'char';
         $GLOBALS['cfg']['ShowFunctionFields'] = true;
 
@@ -1578,7 +1465,6 @@ class InsertEditTest extends AbstractTestCase
                 $current_row,
                 $column,
                 $extracted_columnspec,
-                false,
                 ['int'],
                 'a',
                 false,
@@ -1607,7 +1493,6 @@ class InsertEditTest extends AbstractTestCase
                 $current_row,
                 $column,
                 $extracted_columnspec,
-                false,
                 ['int'],
                 'a',
                 false,
@@ -1642,10 +1527,7 @@ class InsertEditTest extends AbstractTestCase
             $this->insertEdit,
             InsertEdit::class,
             'getSpecialCharsAndBackupFieldForInsertingMode',
-            [
-                $column,
-                false,
-            ]
+            [$column]
         );
 
         $this->assertEquals(
@@ -1667,10 +1549,7 @@ class InsertEditTest extends AbstractTestCase
             $this->insertEdit,
             InsertEdit::class,
             'getSpecialCharsAndBackupFieldForInsertingMode',
-            [
-                $column,
-                false,
-            ]
+            [$column]
         );
 
         $this->assertEquals(
@@ -1728,52 +1607,6 @@ class InsertEditTest extends AbstractTestCase
     }
 
     /**
-     * Test for isInsertRow
-     */
-    public function testIsInsertRow(): void
-    {
-        $_POST['insert_rows'] = 5;
-        $GLOBALS['cfg']['InsertRows'] = 2;
-
-        $scriptsMock = $this->getMockBuilder(Scripts::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['addFile'])
-            ->getMock();
-
-        $scriptsMock->expects($this->exactly(2))
-            ->method('addFile');
-
-        $headerMock = $this->getMockBuilder(Header::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['getScripts'])
-            ->getMock();
-
-        $headerMock->expects($this->once())
-            ->method('getScripts')
-            ->will($this->returnValue($scriptsMock));
-
-        $responseMock = $this->getMockBuilder(Response::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['getHeader'])
-            ->getMock();
-
-        $responseMock->expects($this->once())
-            ->method('getHeader')
-            ->will($this->returnValue($headerMock));
-
-        $restoreInstance = Response::getInstance();
-        $response = new ReflectionProperty(Response::class, 'instance');
-        $response->setAccessible(true);
-        $response->setValue($responseMock);
-
-        $this->insertEdit->isInsertRow();
-
-        $response->setValue($restoreInstance);
-
-        $this->assertEquals(5, $GLOBALS['cfg']['InsertRows']);
-    }
-
-    /**
      * Test for setSessionForEditNext
      */
     public function testSetSessionForEditNext(): void
@@ -1785,7 +1618,8 @@ class InsertEditTest extends AbstractTestCase
         $meta_arr = [new FieldMetadata(MYSQLI_TYPE_DECIMAL, MYSQLI_PRI_KEY_FLAG, $temp)];
 
         $row = ['1' => 1];
-        $res = 'foobar';
+
+        $resultStub = $this->createMock(DummyResult::class);
 
         $dbi = $this->getMockBuilder(DatabaseInterface::class)
             ->disableOriginalConstructor()
@@ -1794,16 +1628,15 @@ class InsertEditTest extends AbstractTestCase
         $dbi->expects($this->once())
             ->method('query')
             ->with('SELECT * FROM `db`.`table` WHERE `a` > 2 LIMIT 1;')
-            ->will($this->returnValue($res));
+            ->will($this->returnValue($resultStub));
 
-        $dbi->expects($this->once())
+        $resultStub->expects($this->once())
             ->method('fetchRow')
-            ->with($res)
             ->will($this->returnValue($row));
 
         $dbi->expects($this->once())
             ->method('getFieldsMeta')
-            ->with($res)
+            ->with($resultStub)
             ->will($this->returnValue($meta_arr));
 
         $GLOBALS['dbi'] = $dbi;
@@ -1812,10 +1645,7 @@ class InsertEditTest extends AbstractTestCase
         $this->insertEdit = new InsertEdit($GLOBALS['dbi']);
         $this->insertEdit->setSessionForEditNext('`a` = 2');
 
-        $this->assertEquals(
-            'CONCAT(`table`.`orgname`) IS NULL',
-            $_SESSION['edit_next']
-        );
+        $this->assertEquals('CONCAT(`table`.`orgname`) IS NULL', $_SESSION['edit_next']);
     }
 
     /**
@@ -1844,10 +1674,7 @@ class InsertEditTest extends AbstractTestCase
             $this->insertEdit->getGotoInclude('index')
         );
 
-        $this->assertEquals(
-            '',
-            $GLOBALS['table']
-        );
+        $this->assertEquals('', $GLOBALS['table']);
 
         $_POST['after_insert'] = 'new_insert';
         $this->assertEquals(
@@ -1949,16 +1776,8 @@ class InsertEditTest extends AbstractTestCase
     public function testGetWarningMessages(): void
     {
         $warnings = [
-            [
-                'Level' => 1,
-                'Code' => 42,
-                'Message' => 'msg1',
-            ],
-            [
-                'Level' => 2,
-                'Code' => 43,
-                'Message' => 'msg2',
-            ],
+            Warning::fromArray(['Level' => 'Error', 'Code' => '1001', 'Message' => 'Message 1']),
+            Warning::fromArray(['Level' => 'Warning', 'Code' => '1002', 'Message' => 'Message 2']),
         ];
 
         $dbi = $this->getMockBuilder(DatabaseInterface::class)
@@ -1979,13 +1798,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            [
-                '1: #42 msg1',
-                '2: #43 msg2',
-            ],
-            $result
-        );
+        $this->assertEquals(['Error: #1001 Message 1', 'Warning: #1002 Message 2'], $result);
     }
 
     /**
@@ -1998,6 +1811,8 @@ class InsertEditTest extends AbstractTestCase
         $map['f']['foreign_table'] = 'TABLES';
         $map['f']['foreign_field'] = 'f';
 
+        $resultStub = $this->createMock(DummyResult::class);
+
         $dbi = $this->getMockBuilder(DatabaseInterface::class)
             ->disableOriginalConstructor()
             ->getMock();
@@ -2005,22 +1820,18 @@ class InsertEditTest extends AbstractTestCase
         $dbi->expects($this->once())
             ->method('tryQuery')
             ->with(
-                'SELECT `TABLE_COMMENT` FROM `information_schema`.`TABLES` WHERE '
-                . '`f`=1',
-                DatabaseInterface::CONNECT_USER,
-                DatabaseInterface::QUERY_STORE
+                'SELECT `TABLE_COMMENT` FROM `information_schema`.`TABLES` WHERE `f`=1'
             )
-            ->will($this->returnValue('r1'));
+            ->will($this->returnValue($resultStub));
 
-        $dbi->expects($this->once())
+        $resultStub->expects($this->once())
             ->method('numRows')
-            ->with('r1')
             ->will($this->returnValue('2'));
 
-        $dbi->expects($this->once())
-            ->method('fetchRow')
-            ->with('r1')
-            ->will($this->returnValue(['2']));
+        $resultStub->expects($this->once())
+            ->method('fetchValue')
+            ->with(0)
+            ->will($this->returnValue('2'));
 
         $GLOBALS['dbi'] = $dbi;
         $this->insertEdit = new InsertEdit($GLOBALS['dbi']);
@@ -2044,9 +1855,7 @@ class InsertEditTest extends AbstractTestCase
 
         $result = $this->insertEdit->getLinkForRelationalDisplayField($map, 'f', '=1', 'a>', 'b<');
 
-        $sqlSignature = Core::signSqlQuery(
-            'SELECT * FROM `information_schema`.`TABLES` WHERE `f`=1'
-        );
+        $sqlSignature = Core::signSqlQuery('SELECT * FROM `information_schema`.`TABLES` WHERE `f`=1');
 
         $this->assertEquals(
             '<a href="index.php?route=/sql&db=information_schema&table=TABLES&pos=0&'
@@ -2201,7 +2010,7 @@ class InsertEditTest extends AbstractTestCase
             [2],
             'foo',
             [],
-            0,
+            '0',
             []
         );
 
@@ -2331,10 +2140,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            '123',
-            $result
-        );
+        $this->assertEquals('123', $result);
 
         // case 2
         $result = $this->insertEdit->getCurrentValueForDifferentTypes(
@@ -2354,10 +2160,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            'NULL',
-            $result
-        );
+        $this->assertEquals('NULL', $result);
 
         // case 3
         $result = $this->insertEdit->getCurrentValueForDifferentTypes(
@@ -2377,10 +2180,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            "''",
-            $result
-        );
+        $this->assertEquals("''", $result);
 
         // case 4
         $_POST['fields']['multi_edit'][0][0] = [];
@@ -2401,10 +2201,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            "''",
-            $result
-        );
+        $this->assertEquals("''", $result);
 
         // case 5
         $result = $this->insertEdit->getCurrentValueForDifferentTypes(
@@ -2424,10 +2221,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            '0x313031',
-            $result
-        );
+        $this->assertEquals('0x313031', $result);
 
         // case 6
         $result = $this->insertEdit->getCurrentValueForDifferentTypes(
@@ -2447,10 +2241,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            '',
-            $result
-        );
+        $this->assertEquals('', $result);
 
         // case 7
         $result = $this->insertEdit->getCurrentValueForDifferentTypes(
@@ -2470,10 +2261,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            "b'00010'",
-            $result
-        );
+        $this->assertEquals("b'00010'", $result);
 
         // case 7
         $result = $this->insertEdit->getCurrentValueForDifferentTypes(
@@ -2493,10 +2281,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            "'20\\'12'",
-            $result
-        );
+        $this->assertEquals("'20\\'12'", $result);
 
         // case 8
         $_POST['fields']['multi_edit'][0][0] = [];
@@ -2517,10 +2302,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            'NULL',
-            $result
-        );
+        $this->assertEquals('NULL', $result);
 
         // case 9
         $result = $this->insertEdit->getCurrentValueForDifferentTypes(
@@ -2540,10 +2322,7 @@ class InsertEditTest extends AbstractTestCase
             []
         );
 
-        $this->assertEquals(
-            "''",
-            $result
-        );
+        $this->assertEquals("''", $result);
     }
 
     /**
@@ -2560,9 +2339,12 @@ class InsertEditTest extends AbstractTestCase
             ->disableOriginalConstructor()
             ->getMock();
 
+        $resultStub = $this->createMock(DummyResult::class);
+
         $dbi->expects($this->exactly(3))
             ->method('tryQuery')
-            ->with('SELECT `table`.`a` FROM `db`.`table` WHERE 1');
+            ->with('SELECT `table`.`a` FROM `db`.`table` WHERE 1')
+            ->willReturn($resultStub);
 
         $meta1 = new FieldMetadata(MYSQLI_TYPE_TINY, 0, (object) []);
         $meta2 = new FieldMetadata(MYSQLI_TYPE_TINY, 0, (object) []);
@@ -2571,46 +2353,25 @@ class InsertEditTest extends AbstractTestCase
             ->method('getFieldsMeta')
             ->will($this->onConsecutiveCalls([$meta1], [$meta2], [$meta3]));
 
-        $dbi->expects($this->exactly(3))
-            ->method('fetchRow')
-            ->will($this->onConsecutiveCalls(null, [0 => '123'], [0 => '2013-08-28 06:34:14']));
-
-        $dbi->expects($this->exactly(3))
-            ->method('freeResult');
+        $resultStub->expects($this->exactly(3))
+            ->method('fetchValue')
+            ->will($this->onConsecutiveCalls(false, '123', '2013-08-28 06:34:14'));
 
         $GLOBALS['dbi'] = $dbi;
         $this->insertEdit = new InsertEdit($GLOBALS['dbi']);
 
-        $this->insertEdit->verifyWhetherValueCanBeTruncatedAndAppendExtraData(
-            'db',
-            'table',
-            'a',
-            $extra_data
-        );
+        $this->insertEdit->verifyWhetherValueCanBeTruncatedAndAppendExtraData('db', 'table', 'a', $extra_data);
 
         $this->assertFalse($extra_data['isNeedToRecheck']);
 
-        $this->insertEdit->verifyWhetherValueCanBeTruncatedAndAppendExtraData(
-            'db',
-            'table',
-            'a',
-            $extra_data
-        );
+        $this->insertEdit->verifyWhetherValueCanBeTruncatedAndAppendExtraData('db', 'table', 'a', $extra_data);
 
         $this->assertEquals('123', $extra_data['truncatableFieldValue']);
         $this->assertTrue($extra_data['isNeedToRecheck']);
 
-        $this->insertEdit->verifyWhetherValueCanBeTruncatedAndAppendExtraData(
-            'db',
-            'table',
-            'a',
-            $extra_data
-        );
+        $this->insertEdit->verifyWhetherValueCanBeTruncatedAndAppendExtraData('db', 'table', 'a', $extra_data);
 
-        $this->assertEquals(
-            '2013-08-28 06:34:14.000000',
-            $extra_data['truncatableFieldValue']
-        );
+        $this->assertEquals('2013-08-28 06:34:14.000000', $extra_data['truncatableFieldValue']);
         $this->assertTrue($extra_data['isNeedToRecheck']);
     }
 
@@ -2630,7 +2391,10 @@ class InsertEditTest extends AbstractTestCase
         $dbi->expects($this->once())
             ->method('getColumns')
             ->with('db', 'table')
-            ->will($this->returnValue(['a' => 'b', 'c' => 'd']));
+            ->will($this->returnValue([
+                ['a' => 'b', 'c' => 'd'],
+                ['e' => 'f', 'g' => 'h'],
+            ]));
 
         $GLOBALS['dbi'] = $dbi;
         $this->insertEdit = new InsertEdit($GLOBALS['dbi']);
@@ -2639,8 +2403,8 @@ class InsertEditTest extends AbstractTestCase
 
         $this->assertEquals(
             [
-                'b',
-                'd',
+                ['a' => 'b', 'c' => 'd'],
+                ['e' => 'f', 'g' => 'h'],
             ],
             $result
         );
@@ -2655,6 +2419,12 @@ class InsertEditTest extends AbstractTestCase
             ->disableOriginalConstructor()
             ->getMock();
 
+        $resultStub = $this->createMock(DummyResult::class);
+
+        $dbi->expects($this->exactly(2))
+            ->method('query')
+            ->will($this->returnValue($resultStub));
+
         $GLOBALS['dbi'] = $dbi;
         $_POST['where_clause'] = '1';
         $_SESSION['edit_next'] = '1';
@@ -2665,17 +2435,17 @@ class InsertEditTest extends AbstractTestCase
         $GLOBALS['cfg']['ShowSQL'] = false;
         $_POST['default_action'] = 'insert';
 
-        $responseMock = $this->getMockBuilder(Response::class)
+        $responseMock = $this->getMockBuilder(ResponseRenderer::class)
             ->disableOriginalConstructor()
             ->onlyMethods(['addHtml'])
             ->getMock();
 
-        $restoreInstance = Response::getInstance();
-        $response = new ReflectionProperty(Response::class, 'instance');
+        $restoreInstance = ResponseRenderer::getInstance();
+        $response = new ReflectionProperty(ResponseRenderer::class, 'instance');
         $response->setAccessible(true);
         $response->setValue($responseMock);
 
-        $this->insertEdit = new InsertEdit($GLOBALS['dbi']);
+        $this->insertEdit = new InsertEdit($dbi);
 
         $result = $this->insertEdit->determineInsertOrEdit('1', 'db', 'table');
 
@@ -2685,8 +2455,8 @@ class InsertEditTest extends AbstractTestCase
                 null,
                 [1],
                 null,
-                [null],
-                [null],
+                [$resultStub],
+                [[]],
                 false,
                 'edit_next',
             ],
@@ -2708,7 +2478,7 @@ class InsertEditTest extends AbstractTestCase
                 null,
                 [],
                 null,
-                null,
+                $resultStub,
                 [
                     false,
                     false,
@@ -2733,7 +2503,7 @@ class InsertEditTest extends AbstractTestCase
 
         $dbi->expects($this->once())
             ->method('getColumns')
-            ->with('db', 'table', null, true)
+            ->with('db', 'table', true)
             ->will(
                 $this->returnValue(
                     [
@@ -2770,26 +2540,6 @@ class InsertEditTest extends AbstractTestCase
     }
 
     /**
-     * Test for getUrlParameters
-     */
-    public function testGetUrlParameters(): void
-    {
-        global $goto;
-
-        $_POST['sql_query'] = 'SELECT';
-        $goto = 'tbl_sql.php';
-
-        $this->assertEquals(
-            [
-                'db' => 'foo',
-                'sql_query' => 'SELECT',
-                'table' => 'bar',
-            ],
-            $this->insertEdit->getUrlParameters('foo', 'bar')
-        );
-    }
-
-    /**
      * Test for getHtmlForIgnoreOption
      */
     public function testGetHtmlForIgnoreOption(): void
@@ -2819,13 +2569,11 @@ class InsertEditTest extends AbstractTestCase
         $tabindex = 0;
         $GLOBALS['plugin_scripts'] = [];
         $foreigners = ['foreign_keys_data' => []];
-        $table_columns = [
-            [
-                'Field' => 'col',
-                'Type' => 'varchar(20)',
-                'Null' => 'Yes',
-                'Privileges' => 'insert,update,select',
-            ],
+        $table_column = [
+            'Field' => 'col',
+            'Type' => 'varchar(20)',
+            'Null' => 'Yes',
+            'Privileges' => 'insert,update,select',
         ];
         $repopulate = [md5('col') => 'val'];
         $column_mime = [
@@ -2833,17 +2581,22 @@ class InsertEditTest extends AbstractTestCase
             'input_transformation_options' => '150',
         ];
 
+        $resultStub = $this->createMock(DummyResult::class);
+        $resultStub->expects($this->any())
+            ->method('getFieldsMeta')
+            ->will($this->returnValue([new FieldMetadata(0, 0, (object) ['length' => -1])]));
+
         // Test w/ input transformation
         $actual = $this->callFunction(
             $this->insertEdit,
             InsertEdit::class,
             'getHtmlForInsertEditFormColumn',
             [
-                $table_columns,
+                $table_column,
                 0,
                 [],
                 false,
-                [],
+                $resultStub,
                 '',
                 '',
                 '',
@@ -2867,31 +2620,12 @@ class InsertEditTest extends AbstractTestCase
             ]
         );
 
-        $this->assertStringContainsString(
-            'col',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<option>AES_ENCRYPT</option>',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<span class="column_type" dir="ltr">varchar(20)</span>',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<tr class="noclick">',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<span class="default_value hide">',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<img src="" width="150" height="100" '
-            . 'alt="Image preview here">',
-            $actual
-        );
+        $this->assertStringContainsString('col', $actual);
+        $this->assertStringContainsString('<option>AES_ENCRYPT</option>', $actual);
+        $this->assertStringContainsString('<span class="column_type" dir="ltr">varchar(20)</span>', $actual);
+        $this->assertStringContainsString('<tr class="noclick">', $actual);
+        $this->assertStringContainsString('<span class="default_value hide">', $actual);
+        $this->assertStringContainsString('<img src="" width="150" height="100" alt="Image preview here">', $actual);
         $this->assertStringContainsString(
             '<input type="file" '
             . 'name="fields_upload[d89e2ddb530bb8953b290ab0793aecb0]" '
@@ -2902,16 +2636,14 @@ class InsertEditTest extends AbstractTestCase
         );
 
         // Test w/o input_transformation
-        $table_columns = [
-            [
-                'Field' => 'qwerty',
-                'Type' => 'datetime',
-                'Null' => 'Yes',
-                'Key' => '',
-                'Extra' => '',
-                'Default' => null,
-                'Privileges' => 'insert,update,select',
-            ],
+        $table_column = [
+            'Field' => 'qwerty',
+            'Type' => 'datetime',
+            'Null' => 'Yes',
+            'Key' => '',
+            'Extra' => '',
+            'Default' => null,
+            'Privileges' => 'insert,update,select',
         ];
         $repopulate = [md5('qwerty') => '12-10-14'];
         $actual = $this->callFunction(
@@ -2919,11 +2651,11 @@ class InsertEditTest extends AbstractTestCase
             InsertEdit::class,
             'getHtmlForInsertEditFormColumn',
             [
-                $table_columns,
+                $table_column,
                 0,
                 [],
                 false,
-                [],
+                $resultStub,
                 '',
                 '',
                 '[a][0]',
@@ -2950,9 +2682,7 @@ class InsertEditTest extends AbstractTestCase
         $this->assertStringContainsString('<option>UUID</option>', $actual);
         $this->assertStringContainsString('<span class="column_type" dir="ltr">datetime</span>', $actual);
         $this->assertStringContainsString(
-            '<input type="text" '
-            . 'name="fields[a][0][d8578edf8458ce06fbc5bb76a58c5ca4]" '
-            . 'value="12-10-14.000000"',
+            '<input type="text" name="fields[a][0][d8578edf8458ce06fbc5bb76a58c5ca4]" value="12-10-14.000000"',
             $actual
         );
 
@@ -3020,12 +2750,18 @@ class InsertEditTest extends AbstractTestCase
                 'Privileges' => 'select,insert,update,references',
             ],
         ];
+
+        $resultStub = $this->createMock(DummyResult::class);
+        $resultStub->expects($this->any())
+            ->method('getFieldsMeta')
+            ->will($this->returnValue([new FieldMetadata(0, 0, (object) ['length' => -1])]));
+
         $actual = $this->insertEdit->getHtmlForInsertEditRow(
             [],
             $table_columns,
             [],
             false,
-            [],
+            $resultStub,
             '',
             '',
             '',
@@ -3045,26 +2781,11 @@ class InsertEditTest extends AbstractTestCase
             [],
             ['wc']
         );
-        $this->assertStringContainsString(
-            'test',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<th>Column</th>',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<a',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<th class="w-50">Value</th>',
-            $actual
-        );
-        $this->assertStringContainsString(
-            '<span class="column_type" dir="ltr">longtext</span>',
-            $actual
-        );
+        $this->assertStringContainsString('test', $actual);
+        $this->assertStringContainsString('<th>Column</th>', $actual);
+        $this->assertStringContainsString('<a', $actual);
+        $this->assertStringContainsString('<th class="w-50">Value</th>', $actual);
+        $this->assertStringContainsString('<span class="column_type" dir="ltr">longtext</span>', $actual);
         $this->assertStringContainsString(
             '<textarea name="fields[multi_edit][0][098f6bcd4621d373cade4e832627b4f6]" id="field_1_3"'
                 . ' data-type="CHAR" dir="ltr" rows="20" cols="22"',
@@ -3105,12 +2826,22 @@ class InsertEditTest extends AbstractTestCase
                 'Privileges' => 'select,insert,references',
             ],
         ];
+
+        $resultStub = $this->createMock(DummyResult::class);
+        $resultStub->expects($this->any())
+            ->method('getFieldsMeta')
+            ->will($this->returnValue([
+                new FieldMetadata(0, 0, (object) ['length' => -1]),
+                new FieldMetadata(0, 0, (object) ['length' => -1]),
+                new FieldMetadata(0, 0, (object) ['length' => -1]),
+            ]));
+
         $actual = $this->insertEdit->getHtmlForInsertEditRow(
             [],
             $table_columns,
             [],
             false,
-            [],
+            $resultStub,
             '',
             '',
             '',
@@ -3130,14 +2861,8 @@ class InsertEditTest extends AbstractTestCase
             [],
             ['wc']
         );
-        $this->assertStringContainsString(
-            'foo',
-            $actual
-        );
-        $this->assertStringNotContainsString(
-            'bar',
-            $actual
-        );
+        $this->assertStringContainsString('foo', $actual);
+        $this->assertStringNotContainsString('bar', $actual);
 
         // insert
         $table_columns = [
@@ -3177,7 +2902,7 @@ class InsertEditTest extends AbstractTestCase
             $table_columns,
             [],
             false,
-            [],
+            $resultStub,
             '',
             '',
             '',
@@ -3197,10 +2922,7 @@ class InsertEditTest extends AbstractTestCase
             [],
             ['wc']
         );
-        $this->assertStringContainsString(
-            'foo',
-            $actual
-        );
+        $this->assertStringContainsString('foo', $actual);
         $this->assertStringContainsString(
             '<textarea name="fields[multi_edit][0][37b51d194a7513e45b56f6524f2d51f2]"',
             $actual

@@ -7,6 +7,7 @@ declare(strict_types=1);
 
 namespace PhpMyAdmin;
 
+use PhpMyAdmin\ConfigStorage\Relation;
 use Traversable;
 
 use function basename;
@@ -14,6 +15,7 @@ use function file_exists;
 use function in_array;
 use function is_array;
 use function is_object;
+use function is_scalar;
 use function json_encode;
 use function json_last_error;
 use function strlen;
@@ -26,14 +28,12 @@ class Footer
     /**
      * Scripts instance
      *
-     * @access private
      * @var Scripts
      */
     private $scripts;
     /**
      * Whether we are servicing an ajax request.
      *
-     * @access private
      * @var bool
      */
     private $isAjax;
@@ -41,14 +41,12 @@ class Footer
      * Whether to only close the BODY and HTML tags
      * or also include scripts, errors and links
      *
-     * @access private
      * @var bool
      */
     private $isMinimal;
     /**
      * Whether to display anything
      *
-     * @access private
      * @var bool
      */
     private $isEnabled;
@@ -122,11 +120,7 @@ class Footer
     public function getDebugMessage(): string
     {
         $retval = '\'null\'';
-        if (
-            $GLOBALS['cfg']['DBG']['sql']
-            && empty($_REQUEST['no_debug'])
-            && ! empty($_SESSION['debug'])
-        ) {
+        if ($GLOBALS['cfg']['DBG']['sql'] && empty($_REQUEST['no_debug']) && ! empty($_SESSION['debug'])) {
             // Remove recursions and iterators from $_SESSION['debug']
             self::removeRecursion($_SESSION['debug']);
 
@@ -164,10 +158,7 @@ class Footer
         $params['server'] = $server;
 
         // needed for server privileges tabs
-        if (
-            isset($_GET['viewing_mode'])
-            && in_array($_GET['viewing_mode'], ['server', 'db', 'table'])
-        ) {
+        if (isset($_GET['viewing_mode']) && in_array($_GET['viewing_mode'], ['server', 'db', 'table'])) {
             $params['viewing_mode'] = $_GET['viewing_mode'];
         }
 
@@ -176,9 +167,7 @@ class Footer
          *          add the following condition below when that is fixed
          *          && $_GET['checkprivsdb'] == $db
          */
-        if (
-            isset($_GET['checkprivsdb'])
-        ) {
+        if (isset($_GET['checkprivsdb'])) {
             $params['checkprivsdb'] = $_GET['checkprivsdb'];
         }
 
@@ -187,16 +176,11 @@ class Footer
          *          add the following condition below when that is fixed
          *          && $_REQUEST['checkprivstable'] == $table
          */
-        if (
-            isset($_GET['checkprivstable'])
-        ) {
+        if (isset($_GET['checkprivstable'])) {
             $params['checkprivstable'] = $_GET['checkprivstable'];
         }
 
-        if (
-            isset($_REQUEST['single_table'])
-            && in_array($_REQUEST['single_table'], [true, false])
-        ) {
+        if (isset($_REQUEST['single_table']) && in_array($_REQUEST['single_table'], [true, false])) {
             $params['single_table'] = $_REQUEST['single_table'];
         }
 
@@ -229,7 +213,11 @@ class Footer
         global $dbi;
 
         if (
-            Core::isValid($_REQUEST['no_history'])
+            (
+                isset($_REQUEST['no_history'])
+                && is_scalar($_REQUEST['no_history'])
+                && strlen((string) $_REQUEST['no_history']) > 0
+            )
             || ! empty($GLOBALS['error_message'])
             || empty($GLOBALS['sql_query'])
             || ! isset($dbi)
@@ -239,8 +227,8 @@ class Footer
         }
 
         $this->relation->setHistory(
-            Core::ifSetOr($GLOBALS['db'], ''),
-            Core::ifSetOr($GLOBALS['table'], ''),
+            isset($GLOBALS['db']) && is_scalar($GLOBALS['db']) ? (string) $GLOBALS['db'] : '',
+            isset($GLOBALS['table']) && is_scalar($GLOBALS['table']) ? (string) $GLOBALS['table'] : '',
             $GLOBALS['cfg']['Server']['user'],
             $GLOBALS['sql_query']
         );

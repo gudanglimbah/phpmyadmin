@@ -8,7 +8,7 @@ declare(strict_types=1);
 namespace PhpMyAdmin\Controllers\Server\Status;
 
 use PhpMyAdmin\DatabaseInterface;
-use PhpMyAdmin\Response;
+use PhpMyAdmin\ResponseRenderer;
 use PhpMyAdmin\Server\Status\Data;
 use PhpMyAdmin\Template;
 use PhpMyAdmin\Url;
@@ -24,18 +24,13 @@ class QueriesController extends AbstractController
     /** @var DatabaseInterface */
     private $dbi;
 
-    /**
-     * @param Response          $response
-     * @param Data              $data
-     * @param DatabaseInterface $dbi
-     */
-    public function __construct($response, Template $template, $data, $dbi)
+    public function __construct(ResponseRenderer $response, Template $template, Data $data, DatabaseInterface $dbi)
     {
         parent::__construct($response, $template, $data);
         $this->dbi = $dbi;
     }
 
-    public function index(): void
+    public function __invoke(): void
     {
         global $errorUrl;
 

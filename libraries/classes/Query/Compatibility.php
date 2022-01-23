@@ -7,6 +7,7 @@ namespace PhpMyAdmin\Query;
 use PhpMyAdmin\DatabaseInterface;
 use PhpMyAdmin\Util;
 
+use function in_array;
 use function is_string;
 use function strlen;
 use function strpos;
@@ -21,16 +22,10 @@ class Compatibility
     public static function getISCompatForGetTablesFull(array $eachTables, string $eachDatabase): array
     {
         foreach ($eachTables as $table_name => $_) {
-            if (
-                ! isset($eachTables[$table_name]['Type'])
-                && isset($eachTables[$table_name]['Engine'])
-            ) {
+            if (! isset($eachTables[$table_name]['Type']) && isset($eachTables[$table_name]['Engine'])) {
                 // pma BC, same parts of PMA still uses 'Type'
                 $eachTables[$table_name]['Type'] =& $eachTables[$table_name]['Engine'];
-            } elseif (
-                ! isset($eachTables[$table_name]['Engine'])
-                && isset($eachTables[$table_name]['Type'])
-            ) {
+            } elseif (! isset($eachTables[$table_name]['Engine']) && isset($eachTables[$table_name]['Type'])) {
                 // old MySQL reports Type, newer MySQL reports Engine
                 $eachTables[$table_name]['Engine'] =& $eachTables[$table_name]['Type'];
             }
@@ -98,11 +93,7 @@ class Compatibility
             $colType = is_string($colType) ? $colType : '';
             $colTypePosComa = strpos($colType, '(');
             $colTypePosComa = $colTypePosComa !== false ? $colTypePosComa : strlen($colType);
-            $columns[$column_name]['DATA_TYPE'] = substr(
-                $colType,
-                0,
-                $colTypePosComa
-            );
+            $columns[$column_name]['DATA_TYPE'] = substr($colType, 0, $colTypePosComa);
             /**
              * @todo guess CHARACTER_MAXIMUM_LENGTH from COLUMN_TYPE
             */
@@ -119,11 +110,7 @@ class Compatibility
             $colCollationPosUnderscore = $colCollationPosUnderscore !== false
                 ? $colCollationPosUnderscore
                 : strlen($colCollation);
-            $columns[$column_name]['CHARACTER_SET_NAME'] = substr(
-                $colCollation,
-                0,
-                $colCollationPosUnderscore
-            );
+            $columns[$column_name]['CHARACTER_SET_NAME'] = substr($colCollation, 0, $colCollationPosUnderscore);
 
             $ordinal_position++;
         }
@@ -145,13 +132,6 @@ class Compatibility
         return $serverType === 'MariaDB';
     }
 
-    public static function isMySql(): bool
-    {
-        $serverType = Util::getServerType();
-
-        return $serverType === 'MySQL';
-    }
-
     public static function isCompatibleRenameIndex(int $serverVersion): bool
     {
         if (self::isMySqlOrPerconaDb()) {
@@ -164,6 +144,16 @@ class Compatibility
         }
 
         return false;
+    }
+
+    public static function isIntegersLengthRestricted(DatabaseInterface $dbi): bool
+    {
+        // MySQL made restrictions on the integer types' length from versions >= 8.0.18
+        // See: https://dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-19.html
+        $serverType = Util::getServerType();
+        $serverVersion = $dbi->getVersion();
+
+        return $serverType === 'MySQL' && $serverVersion >= 80018;
     }
 
     public static function supportsReferencesPrivilege(DatabaseInterface $dbi): bool
@@ -180,6 +170,17 @@ class Compatibility
         // requires at least one of the SELECT, INSERT, UPDATE, DELETE,
         // or REFERENCES privileges for the parent table.
         return $dbi->getVersion() >= 50622;
+    }
+
+    public static function isIntegersSupportLength(string $type, string $length, DatabaseInterface $dbi): bool
+    {
+        // MySQL Removed the Integer types' length from versions >= 8.0.18
+        // except TINYINT(1).
+        // See: https://dev.mysql.com/doc/relnotes/mysql/8.0/en/news-8-0-19.html
+        $integerTypes = ['SMALLINT', 'MEDIUMINT', 'INT', 'BIGINT'];
+        $typeLengthNotAllowed = in_array($type, $integerTypes) || $type === 'TINYINT' && $length !== '1';
+
+        return ! (self::isIntegersLengthRestricted($dbi) && $typeLengthNotAllowed);
     }
 
     /**
@@ -210,5 +211,16 @@ class Compatibility
         }
 
         return false;
+    }
+
+    /**
+     * @see https://dev.mysql.com/doc/relnotes/mysql/5.7/en/news-5-7-6.html#mysqld-5-7-6-account-management
+     * @see https://mariadb.com/kb/en/mariadb-1042-release-notes/#notable-changes
+     *
+     * @psalm-pure
+     */
+    public static function hasAccountLocking(bool $isMariaDb, int $version): bool
+    {
+        return $isMariaDb && $version >= 100402 || ! $isMariaDb && $version >= 50706;
     }
 }

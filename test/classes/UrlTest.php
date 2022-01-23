@@ -6,6 +6,9 @@ namespace PhpMyAdmin\Tests;
 
 use PhpMyAdmin\Url;
 
+use function is_string;
+use function parse_str;
+use function str_repeat;
 use function urldecode;
 
 /**
@@ -16,14 +19,13 @@ class UrlTest extends AbstractTestCase
     /**
      * Sets up the fixture, for example, opens a network connection.
      * This method is called before a test is executed.
-     *
-     * @access protected
      */
     protected function setUp(): void
     {
         parent::setUp();
         parent::setLanguage();
         unset($_COOKIE['pma_lang']);
+        $GLOBALS['config']->set('URLQueryEncryption', false);
     }
 
     /**
@@ -115,8 +117,7 @@ class UrlTest extends AbstractTestCase
             'change_column' => 1,
         ]);
         $this->assertEquals(
-            'index.php?route=/test&db=%253%5C%24s&table=%252%'
-            . '5C%24s&field=%251%5C%24s&change_column=1&lang=en',
+            'index.php?route=/test&db=%253%5C%24s&table=%252%5C%24s&field=%251%5C%24s&change_column=1&lang=en',
             $generatedUrl
         );
     }
@@ -135,10 +136,7 @@ class UrlTest extends AbstractTestCase
         ]);
         $expectedUrl = 'index.php?route=/test&db=%26test%3D_database%3D'
         . '&table=%26test%3D_database%3D&field=%26test%3D_database%3D&change_column=1&lang=en';
-        $this->assertEquals(
-            $expectedUrl,
-            $generatedUrl
-        );
+        $this->assertEquals($expectedUrl, $generatedUrl);
 
         $this->assertEquals(
             'index.php?route=/test&db=&test=_database=&table=&'
@@ -170,5 +168,75 @@ class UrlTest extends AbstractTestCase
             . 'script%3E&field=1&trees=1&book=0&worm=0&lang=en',
             $generatedUrl
         );
+    }
+
+    public function testGetHiddenFields(): void
+    {
+        $_SESSION = [];
+        $this->assertSame('', Url::getHiddenFields([]));
+
+        $_SESSION = [' PMA_token ' => '<b>token</b>'];
+        $this->assertSame(
+            '<input type="hidden" name="token" value="&lt;b&gt;token&lt;/b&gt;">',
+            Url::getHiddenFields([])
+        );
+    }
+
+    /**
+     * @return void
+     */
+    public function testBuildHttpQueryWithUrlQueryEncryptionDisabled()
+    {
+        global $config;
+
+        $config->set('URLQueryEncryption', false);
+        $params = ['db' => 'test_db', 'table' => 'test_table', 'pos' => 0];
+        $this->assertEquals('db=test_db&table=test_table&pos=0', Url::buildHttpQuery($params));
+    }
+
+    /**
+     * @return void
+     */
+    public function testBuildHttpQueryWithUrlQueryEncryptionEnabled()
+    {
+        global $config;
+
+        $_SESSION = [];
+        $config->set('URLQueryEncryption', true);
+        $config->set('URLQueryEncryptionSecretKey', str_repeat('a', 32));
+
+        $params = ['db' => 'test_db', 'table' => 'test_table', 'pos' => 0];
+        $query = Url::buildHttpQuery($params);
+        $this->assertStringStartsWith('pos=0&eq=', $query);
+        parse_str($query, $queryParams);
+        $this->assertCount(2, $queryParams);
+        $this->assertSame('0', $queryParams['pos']);
+        $this->assertTrue(is_string($queryParams['eq']));
+        $this->assertNotSame('', $queryParams['eq']);
+        $this->assertRegExp('/^[a-zA-Z0-9-_=]+$/', $queryParams['eq']);
+        $decrypted = Url::decryptQuery($queryParams['eq']);
+        $this->assertNotNull($decrypted);
+        $this->assertJson($decrypted);
+        $this->assertSame('{"db":"test_db","table":"test_table"}', $decrypted);
+    }
+
+    /**
+     * @return void
+     */
+    public function testQueryEncryption()
+    {
+        global $config;
+
+        $_SESSION = [];
+        $config->set('URLQueryEncryption', true);
+        $config->set('URLQueryEncryptionSecretKey', str_repeat('a', 32));
+
+        $query = '{"db":"test_db","table":"test_table"}';
+        $encrypted = Url::encryptQuery($query);
+        $this->assertNotSame($query, $encrypted);
+        $this->assertNotSame('', $encrypted);
+        $this->assertRegExp('/^[a-zA-Z0-9-_=]+$/', $encrypted);
+        $decrypted = Url::decryptQuery($encrypted);
+        $this->assertSame($query, $decrypted);
     }
 }
